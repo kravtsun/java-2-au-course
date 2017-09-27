@@ -6,7 +6,7 @@ import java.util.function.Function;
 public interface LightFuture<R> {
     // QUESTION: checked or unchecked?
     // chose unchecked in order to create new Supplier object at LightFuture.thenApply().
-    static class LightExecutionException extends RuntimeException {
+    class LightExecutionException extends RuntimeException {
         // TODO convert into interface and implement at LightFutureImpl?
         private final Throwable cause;
 

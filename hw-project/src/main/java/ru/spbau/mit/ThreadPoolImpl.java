@@ -6,7 +6,7 @@ import java.util.function.Supplier;
 import java.util.logging.Logger;
 
 public class ThreadPoolImpl implements ThreadPool {
-    private static final Logger logger = Logger.getLogger("ThreadPool");
+    private static final Logger LOGGER = Logger.getLogger("ThreadPool");
     private Thread[] threads;
 
     private final Queue<Runnable> taskQueue;
@@ -41,7 +41,7 @@ public class ThreadPoolImpl implements ThreadPool {
                             taskQueue.wait();
                         }
                     } catch (InterruptedException e) {
-                        // TODO: differentiate InterruptedException from task with
+                        // TODO differentiate InterruptedException from task with
                         // InterruptedException for thread (coming from ThreadPool.shutdown())
                         // Possible solution: ThreadPool.shutdownInitiated field.
                         break;
@@ -91,9 +91,9 @@ public class ThreadPoolImpl implements ThreadPool {
 
     @Override
     public void shutdown() {
-        logger.info("shutdown start");
+        LOGGER.info("shutdown start");
         while (Arrays.stream(threads).anyMatch(Thread::isAlive)) {
-            logger.info("liveThreadCount: " + Arrays.stream(threads).filter(Thread::isAlive).count());
+            LOGGER.info("liveThreadCount: " + Arrays.stream(threads).filter(Thread::isAlive).count());
 
             for (Thread thread : threads) {
                 thread.interrupt();
@@ -103,10 +103,11 @@ public class ThreadPoolImpl implements ThreadPool {
                 taskQueue.notifyAll();
             }
         }
-        logger.info("shutdown finished");
+        LOGGER.info("shutdown finished");
     }
 
-    <R2, R> LightFuture<R2> addDependentTask(LightFutureImpl<R> child, Function<? super R, ? extends R2> function) {
+    <R2, R> LightFuture<R2> addDependentTask(LightFutureImpl<R> child,
+                                             Function<? super R, ? extends R2> function) {
         return addTask(() -> {
             R arg = child.get();
             return function.apply(arg);

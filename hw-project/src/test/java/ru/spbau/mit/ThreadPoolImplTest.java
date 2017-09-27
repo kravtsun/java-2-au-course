@@ -11,20 +11,19 @@ import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
 import static org.junit.Assert.*;
 
 public class ThreadPoolImplTest {
-    static final Logger logger = Logger.getLogger("root");
-    static final int testTimeout = 1000;
-    final int nthreads = 10;
+    static final Logger LOGGER = Logger.getLogger("root");
+    static final int TEST_TIMEOUT = 1000;
+    static final int NTHREADS = 10;
     private ThreadPool threadPool;
 //    private volatile Void volatileTrash;
 
     @Before
     public void setUp() throws Exception {
-        threadPool = new ThreadPoolImpl(nthreads);
+        threadPool = new ThreadPoolImpl(NTHREADS);
     }
 
     @After
@@ -33,31 +32,31 @@ public class ThreadPoolImplTest {
         threadPool = null;
     }
 
-    @Test(timeout = testTimeout)
+    @Test(timeout = TEST_TIMEOUT)
     public void addTask() throws Exception {
         threadPool = new ThreadPoolImpl(1);
         LightFuture<Integer> simpleFuture = threadPool.addTask(() -> 1 + 2);
         assertEquals((Integer) 3, simpleFuture.get());
     }
 
-    @Test(timeout = testTimeout)
+    @Test(timeout = TEST_TIMEOUT)
     public void factorialTest() throws Exception {
-        factorialTask(this.nthreads);
+        factorialTask(this.NTHREADS);
     }
 
-    @Test(timeout = testTimeout)
+    @Test(timeout = TEST_TIMEOUT)
     public void throwableTest() throws Exception {
-        ThreadPool threadPool = new ThreadPoolImpl(this.nthreads);
+        ThreadPool threadPool = new ThreadPoolImpl(this.NTHREADS);
         // Unchecked only.
         Class[] throwableClasses = {RuntimeException.class, NullPointerException.class};
 
-        BiConsumer<Class, Supplier> checkThrowable = (throwableClass, throwSupplier) -> {
+        BiConsumer<Class, Supplier<Void>> checkThrowable =
+                (Class throwableClass, Supplier<Void> throwSupplier) -> {
             LightFuture<Void> future = threadPool.addTask(throwSupplier);
             Throwable t = null;
             try {
                 future.get();
-            }
-            catch(Throwable caught) {
+            } catch (Throwable caught) {
                 t = caught;
             }
             assertNotNull(t);
@@ -82,10 +81,10 @@ public class ThreadPoolImplTest {
         }
     }
 
-    @Test(timeout = testTimeout)
+    @Test(timeout = TEST_TIMEOUT)
     public void shutdown() throws Exception {
         // some quantity of threads that can certainly block threadPool.
-        final int moreThreads = 2 * this.nthreads;
+        final int moreThreads = 2 * this.NTHREADS;
         ThreadPool interruptThreadPool = new ThreadPoolImpl(2);
         interruptThreadPool.addTask(() -> {
             factorialTask(moreThreads);
@@ -93,13 +92,13 @@ public class ThreadPoolImplTest {
         });
 
         synchronized (this) {
-            wait(testTimeout / 3);
+            wait(TEST_TIMEOUT / 3);
         }
 
         LightFuture<Void> interruptFuture = interruptThreadPool.addTask(() -> {
-            logger.log(Level.INFO, "interrupt initiated.");
+            LOGGER.log(Level.INFO, "interrupt initiated.");
             threadPool.shutdown();
-            logger.log(Level.INFO, "interrupt finished.");
+            LOGGER.log(Level.INFO, "interrupt finished.");
             return null;
         });
 
@@ -122,23 +121,22 @@ public class ThreadPoolImplTest {
 
         synchronized (this) {
             try {
-                wait(testTimeout / 10);
+                wait(TEST_TIMEOUT / 10);
             } catch (InterruptedException e) {
                 throw new Error();
             }
         }
         // threadPool is one thread free, so it should finish all futures by now (one by one).
 
-        System.out.println(Arrays.stream(futures).map(LightFuture::isReady).collect(Collectors.toList()));
         assertTrue(Arrays.stream(futures).allMatch(LightFuture::isReady));
         assertEquals(45, Arrays.stream(natural).sum());
     }
 
     private class FactorialSupplier implements Supplier<Integer> {
         private final int n;
-        private final LightFuture<Integer> previousFuture;
+        private final LightFuture previousFuture;
 
-        public FactorialSupplier(int n, LightFuture<Integer> previousFuture) {
+        FactorialSupplier(int n, LightFuture previousFuture) {
             this.n = n;
             this.previousFuture = previousFuture;
         }
@@ -148,20 +146,22 @@ public class ThreadPoolImplTest {
             if (n <= 1) {
                 return 1;
             } else {
-                return n * previousFuture.get();
+                return n * (Integer) previousFuture.get();
             }
         }
     }
 
     private void factorialTask(int n) {
-        LightFuture<Integer>[] futures = new LightFuture[n];
+        LightFuture[] futures = new LightFuture[n];
         for (int i = 1; i <= n; ++i) {
-            futures[i-1] = threadPool.addTask(new FactorialSupplier(i, i == 1? null : futures[i-2]));
+            LightFuture previousFuture = i > 1 ? futures[i - 2] : null;
+            FactorialSupplier factorialSupplier = new FactorialSupplier(i, previousFuture);
+            futures[i - 1] = threadPool.addTask(factorialSupplier);
         }
-        assertEquals((Integer) factorial(n), futures[n-1].get());
+        assertEquals((Integer) factorial(n), futures[n - 1].get());
     }
 
     private int factorial(int n) {
-        return n <= 1? 1 : n * factorial(n-1);
+        return n <= 1 ? 1 : n * factorial(n - 1);
     }
 }
