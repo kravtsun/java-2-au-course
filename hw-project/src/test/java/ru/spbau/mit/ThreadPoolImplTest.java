@@ -15,10 +15,10 @@ import static org.junit.Assert.*;
 
 public class ThreadPoolImplTest {
     static final Logger logger = Logger.getLogger("root");
-    static final int testTimeout = 0;
+    static final int testTimeout = 1000;
     final int nthreads = 10;
     private ThreadPool threadPool;
-    private volatile Object volatileTrash;
+//    private volatile Void volatileTrash;
 
     @Before
     public void setUp() throws Exception {
@@ -55,8 +55,8 @@ public class ThreadPoolImplTest {
             try {
                 future.get();
             }
-            catch(Throwable catched) {
-                t = catched;
+            catch(Throwable caught) {
+                t = caught;
             }
             assertNotNull(t);
             assertEquals(t.getClass(), LightExecutionException.class);
@@ -91,7 +91,7 @@ public class ThreadPoolImplTest {
         });
 
         synchronized (this) {
-            wait(1);
+            wait(testTimeout / 3);
         }
 
         LightFuture<Void> interruptFuture = interruptThreadPool.addTask(() -> {
@@ -101,8 +101,7 @@ public class ThreadPoolImplTest {
             return null;
         });
 
-        volatileTrash = interruptFuture.get();
-        synchronized (this) {}
+        interruptFuture.get();
     }
 
     private class FactorialSupplier implements Supplier<Integer> {
@@ -136,6 +135,3 @@ public class ThreadPoolImplTest {
         return n <= 1? 1 : n * factorial(n-1);
     }
 }
-
-// Кейсы:
-// 1.
