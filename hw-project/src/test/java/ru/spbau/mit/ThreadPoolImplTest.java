@@ -6,10 +6,12 @@ import org.junit.Test;
 
 import static ru.spbau.mit.LightFuture.LightExecutionException;
 
+import java.util.Arrays;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.*;
 
@@ -102,6 +104,34 @@ public class ThreadPoolImplTest {
         });
 
         interruptFuture.get();
+    }
+
+    @Test
+    public void exaustiveSingleThreadSubmitTest() {
+        threadPool = new ThreadPoolImpl(1);
+        final int ntasks = 10;
+        final int[] natural = new int[ntasks];
+        LightFuture[] futures = new LightFuture[ntasks];
+        for (int i = 0; i < ntasks; ++i) {
+            int finalI = i;
+            futures[i] = threadPool.addTask(() -> {
+                natural[finalI] = finalI;
+                return null;
+            });
+        }
+
+        synchronized (this) {
+            try {
+                wait(testTimeout / 10);
+            } catch (InterruptedException e) {
+                throw new Error();
+            }
+        }
+        // threadPool is one thread free, so it should finish all futures by now (one by one).
+
+        System.out.println(Arrays.stream(futures).map(LightFuture::isReady).collect(Collectors.toList()));
+        assertTrue(Arrays.stream(futures).allMatch(LightFuture::isReady));
+        assertEquals(45, Arrays.stream(natural).sum());
     }
 
     private class FactorialSupplier implements Supplier<Integer> {

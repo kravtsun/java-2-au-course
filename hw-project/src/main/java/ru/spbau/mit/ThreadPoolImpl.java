@@ -37,7 +37,9 @@ public class ThreadPoolImpl implements ThreadPool {
 
                 synchronized (taskQueue) {
                     try {
-                        taskQueue.wait();
+                        if (taskQueue.isEmpty()) {
+                            taskQueue.wait();
+                        }
                     } catch (InterruptedException e) {
                         // TODO: differentiate InterruptedException from task with
                         // InterruptedException for thread (coming from ThreadPool.shutdown())
