@@ -7,7 +7,7 @@ import java.util.logging.Logger;
 
 public class ThreadPoolImpl implements ThreadPool {
     private static final Logger LOGGER = Logger.getLogger("ThreadPool");
-    private Thread[] threads;
+    private final Thread[] threads;
 
     private final Queue<Runnable> taskQueue;
 

@@ -5,6 +5,9 @@
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/hw-project.iml" filepath="$PROJECT_DIR$/.idea/modules/hw-project.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/hw-project_main.iml" filepath="$PROJECT_DIR$/.idea/modules/hw-project_main.iml" group="hw-project" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/hw-project_test.iml" filepath="$PROJECT_DIR$/.idea/modules/hw-project_test.iml" group="hw-project" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/java-2-au-course-hw-project.iml" filepath="$PROJECT_DIR$/.idea/modules/java-2-au-course-hw-project.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/java-2-au-course-hw-project_main.iml" filepath="$PROJECT_DIR$/.idea/modules/java-2-au-course-hw-project_main.iml" group="hw-project" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/java-2-au-course-hw-project_test.iml" filepath="$PROJECT_DIR$/.idea/modules/java-2-au-course-hw-project_test.iml" group="hw-project" />
     </modules>
   </component>
 </project>

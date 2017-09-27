@@ -3,7 +3,7 @@ package ru.spbau.mit;
 import java.util.function.Function;
 
 public class LightFutureImpl<R> implements LightFuture<R> {
-    private ThreadPoolImpl threadPool;
+    private final ThreadPoolImpl threadPool;
 
     // get() method support - should be visible from any thread calling LightFutureImpl.get()
     // ready is set true atomically with result.
@@ -41,34 +41,33 @@ public class LightFutureImpl<R> implements LightFuture<R> {
         return threadPool.addDependentTask(this, function);
     }
 
-    synchronized void setResult(R result) {
+    void setResult(R result) {
         if (this.result != null) {
             throw new Error("LightFuture: invalid state: result is already set.");
         }
         this.result = result;
     }
 
-    synchronized void setReady() {
+    void setReady() {
         if (this.ready) {
             throw new Error("LightFuture: invalid state: ready is already set.");
         }
         this.ready = true;
     }
 
-    synchronized void setException(Throwable throwable) {
+    void setException(Throwable throwable) {
         if (this.throwable != null) {
             throw new Error("LightFuture: invalid state: throwable is already set.");
         }
         this.throwable = throwable;
     }
 
-    private synchronized R getResult() {
+    private R getResult() {
         if (!ready) {
             throw new Error("LightFuture: invalid state: ready is already set.");
         }
         if (throwable != null) {
             Throwable cause = throwable;
-            throwable = null;
             throw new LightExecutionException(cause);
         }
         return result;

@@ -15,11 +15,10 @@ import java.util.logging.Logger;
 import static org.junit.Assert.*;
 
 public class ThreadPoolImplTest {
-    static final Logger LOGGER = Logger.getLogger("root");
-    static final int TEST_TIMEOUT = 1000;
-    static final int NTHREADS = 10;
+    private static final Logger LOGGER = Logger.getLogger("root");
+    private static final int TEST_TIMEOUT = 1000;
+    private static final int NTHREADS = 10;
     private ThreadPool threadPool;
-//    private volatile Void volatileTrash;
 
     @Before
     public void setUp() throws Exception {
@@ -68,7 +67,7 @@ public class ThreadPoolImplTest {
 
         for (Class throwableClass : throwableClasses) {
             Supplier<Void> throwSupplier = () -> {
-                RuntimeException t = null;
+                RuntimeException t;
                 try {
                     t = (RuntimeException) throwableClass.newInstance();
                 } catch (Throwable reflectionError) {
@@ -165,3 +164,5 @@ public class ThreadPoolImplTest {
         return n <= 1 ? 1 : n * factorial(n - 1);
     }
 }
+
+// TODO test for LightFuture.thenApply.
