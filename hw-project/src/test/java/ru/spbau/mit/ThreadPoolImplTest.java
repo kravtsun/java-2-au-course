@@ -86,7 +86,11 @@ public class ThreadPoolImplTest {
         final int moreThreads = 2 * this.NTHREADS;
         ThreadPool interruptThreadPool = new ThreadPoolImpl(2);
         interruptThreadPool.addTask(() -> {
-            factorialTask(moreThreads);
+            try {
+                factorialTask(moreThreads);
+            } catch (LightExecutionException e) {
+                throw new RuntimeException("LightExecutionException");
+            }
             return null;
         });
 
@@ -145,12 +149,16 @@ public class ThreadPoolImplTest {
             if (n <= 1) {
                 return 1;
             } else {
-                return n * (Integer) previousFuture.get();
+                try {
+                    return n * (Integer) previousFuture.get();
+                } catch (LightExecutionException e) {
+                    throw new RuntimeException("LightExecutionException");
+                }
             }
         }
     }
 
-    private void factorialTask(int n) {
+    private void factorialTask(int n) throws LightExecutionException {
         LightFuture[] futures = new LightFuture[n];
         for (int i = 1; i <= n; ++i) {
             LightFuture previousFuture = i > 1 ? futures[i - 2] : null;

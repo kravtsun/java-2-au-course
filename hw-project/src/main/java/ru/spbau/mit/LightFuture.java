@@ -4,10 +4,7 @@ import java.util.function.Function;
 
 //    Задачи, принятные к исполнению, представлены в виде объектов интерфейса LightFuture
 public interface LightFuture<R> {
-    // QUESTION: checked or unchecked?
-    // chose unchecked in order to create new Supplier object at LightFuture.thenApply().
-    class LightExecutionException extends RuntimeException {
-        // TODO convert into interface and implement at LightFutureImpl?
+    class LightExecutionException extends Exception {
         private final Throwable cause;
 
         LightExecutionException(Throwable cause) {
@@ -27,7 +24,7 @@ public interface LightFuture<R> {
     // - В случае, если соответствующий задаче supplier завершился с исключением,
     // этот метод должен завершиться с исключением LightExecutionException
     // - Если результат еще не вычислен, метод ожидает его и возвращает полученное значение
-    R get();
+    R get() throws LightExecutionException;
 
     //    Метод thenApply — принимает объект типа Function,
     // который может быть применен к результату данной задачи X

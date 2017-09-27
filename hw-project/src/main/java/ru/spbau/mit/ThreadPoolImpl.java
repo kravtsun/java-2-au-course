@@ -65,27 +65,8 @@ public class ThreadPoolImpl implements ThreadPool {
     @Override
     public <R> LightFuture<R> addTask(Supplier<R> task) {
         final LightFutureImpl<R> future = new LightFutureImpl<>(this);
-        final Runnable runnable = () -> {
-            try {
-                R result = task.get();
-                future.setResult(result);
-            } catch (Throwable t) {
-                future.setException(t);
-            } finally {
-                future.setReady();
-            }
-            synchronized (future) {
-                future.notifyAll();
-            }
-        };
-
-        synchronized (taskQueue) {
-            final boolean added = taskQueue.add(runnable);
-            if (!added) {
-                throw new Error("addTask: taskQueue inconsistent state:");
-            }
-            taskQueue.notify();
-        }
+        Callable<R> callable = task::get;
+        addRunnable(future.getRunnable(callable));
         return future;
     }
 
@@ -106,11 +87,25 @@ public class ThreadPoolImpl implements ThreadPool {
         LOGGER.info("shutdown finished");
     }
 
-    <R2, R> LightFuture<R2> addDependentTask(LightFutureImpl<R> child,
-                                             Function<? super R, ? extends R2> function) {
-        return addTask(() -> {
+    private <R> void addRunnable(Runnable runnable) {
+        synchronized (taskQueue) {
+            final boolean added = taskQueue.add(runnable);
+            if (!added) {
+                throw new Error("addTask: taskQueue inconsistent state:");
+            }
+            taskQueue.notify();
+        }
+    }
+
+    <R, R2> LightFuture<R2> addDependentTask(LightFutureImpl<R> child,
+                                            Function<? super R, ? extends R2> function) {
+        final LightFutureImpl<R2> future = new LightFutureImpl<>(this);
+        Runnable runnable = future.getRunnable(() -> {
             R arg = child.get();
-            return function.apply(arg);
+            R2 result = function.apply(arg);
+            return result;
         });
+        addRunnable(runnable);
+        return future;
     }
 }
