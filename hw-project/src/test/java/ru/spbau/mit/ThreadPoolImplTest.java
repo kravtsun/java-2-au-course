@@ -94,9 +94,7 @@ public class ThreadPoolImplTest {
             return null;
         });
 
-        synchronized (this) {
-            wait(TEST_TIMEOUT / 3);
-        }
+        Thread.sleep(TEST_TIMEOUT / 3);
 
         LightFuture<Void> interruptFuture = interruptThreadPool.addTask(() -> {
             LOGGER.log(Level.INFO, "interrupt initiated.");
@@ -109,7 +107,7 @@ public class ThreadPoolImplTest {
     }
 
     @Test
-    public void exaustiveSingleThreadSubmitTest() {
+    public void exaustiveSingleThreadSubmitTest() throws Exception {
         threadPool = new ThreadPoolImpl(1);
         final int ntasks = 10;
         final int[] natural = new int[ntasks];
@@ -122,17 +120,27 @@ public class ThreadPoolImplTest {
             });
         }
 
-        synchronized (this) {
-            try {
-                wait(TEST_TIMEOUT / 10);
-            } catch (InterruptedException e) {
-                throw new Error();
-            }
-        }
+        Thread.sleep(TEST_TIMEOUT / 10);
+
         // threadPool is one thread free, so it should finish all futures by now (one by one).
 
         assertTrue(Arrays.stream(futures).allMatch(LightFuture::isReady));
         assertEquals(45, Arrays.stream(natural).sum());
+    }
+
+    @Test
+    public void thenAfterTest() throws Exception {
+        final int n = 2 * NTHREADS;
+
+        LightFuture<Integer> future = null;
+        for (int i = 0; i < n; ++i) {
+            if (future == null) {
+                future = threadPool.addTask(() -> 1);
+            } else {
+                future = future.thenApply((x) -> x + 1);
+            }
+        }
+        assertEquals((Integer) n, future.get());
     }
 
     private class FactorialSupplier implements Supplier<Integer> {
@@ -172,5 +180,3 @@ public class ThreadPoolImplTest {
         return n <= 1 ? 1 : n * factorial(n - 1);
     }
 }
-
-// TODO test for LightFuture.thenApply.
