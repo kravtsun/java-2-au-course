@@ -13,13 +13,12 @@ repositories {
 
 dependencies {
     testCompile group: 'junit', name: 'junit', version: '4.12'
-
-    // https://mvnrepository.com/artifact/com.puppycrawl.tools/checkstyle
-//    compile group: 'com.puppycrawl.tools', name: 'checkstyle', version: '8.2'
-
     // https://mvnrepository.com/artifact/org.openjdk.jcstress/jcstress-core
-    testCompile group: 'org.openjdk.jcstress', name: 'jcstress-core', version: '0.4'
+    // testCompile group: 'org.openjdk.jcstress', name: 'jcstress-core', version: '0.4'
+}
 
+test {
+    testLogging.showStandardStreams = true
 }
 
 compileJava {
@@ -29,3 +28,5 @@ compileJava {
 compileTestJava {
     options.compilerArgs += ["-Xlint:unchecked"]
 }
+
+
