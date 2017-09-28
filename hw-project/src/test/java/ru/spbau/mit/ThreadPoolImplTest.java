@@ -6,11 +6,17 @@ import org.junit.Test;
 
 import static ru.spbau.mit.LightFuture.LightExecutionException;
 
+import java.lang.Thread.State;
+import java.lang.reflect.Field;
 import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Semaphore;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.*;
 
@@ -128,7 +134,7 @@ public class ThreadPoolImplTest {
         assertEquals(45, Arrays.stream(natural).sum());
     }
 
-    @Test
+    @Test(timeout = TEST_TIMEOUT)
     public void thenAfterTest() throws Exception {
         final int n = 2 * NTHREADS;
 
@@ -143,7 +149,66 @@ public class ThreadPoolImplTest {
         assertEquals((Integer) n, future.get());
     }
 
-    private class FactorialSupplier implements Supplier<Integer> {
+    @Test(timeout = TEST_TIMEOUT)
+    public void threadCountLiveTest() throws Exception {
+        final int n = NTHREADS;
+        final Semaphore semaphore = new Semaphore(1);
+        semaphore.acquire();
+        for (int i = 0; i < n; i++) {
+            threadPool.addTask(() -> {
+                try {
+                    semaphore.acquire();
+                } catch (InterruptedException e) {
+                    throw new Error();
+                }
+                semaphore.release();
+                return null;
+            });
+        }
+
+        Thread[] threads = getThreads(threadPool);
+        final long liveThreadsCount = Arrays.stream(threads).filter(Thread::isAlive).count();
+        assertTrue(NTHREADS <= liveThreadsCount);
+        semaphore.release();
+        threadPool.shutdown();
+    }
+
+    @Test(timeout = TEST_TIMEOUT)
+    public void threadCountRunningTest() throws Exception {
+        final int n = 5;
+        CountDownLatch countDownLatch = new CountDownLatch(n);
+        ThreadPool threadPool = new ThreadPoolImpl(n);
+        for (int i = 0; i < n; i++) {
+            threadPool.addTask(() -> {
+                countDownLatch.countDown();
+                int j = 0;
+                while (!Thread.currentThread().isInterrupted()) {
+                    j++;
+                }
+                return null;
+            });
+        }
+        countDownLatch.await();
+        Thread[] threads = getThreads(threadPool);
+        List<State> threadsStates = Arrays.stream(threads).map(Thread::getState).collect(Collectors.toList());
+        final long activeThreadsCount = threadsStates.stream().filter((st) -> st.equals(State.RUNNABLE)).count();
+        LOGGER.info(threadsStates.toString());
+        LOGGER.info("activeThreadsCount = " + activeThreadsCount);
+        assertTrue(n <= activeThreadsCount);
+        threadPool.shutdown();
+    }
+
+    private static Thread[] getThreads(ThreadPool threadPool) throws IllegalAccessException {
+        Field[] fields = threadPool.getClass().getDeclaredFields();
+        Field threadsField = Arrays.stream(fields)
+                .filter((f) -> f.getName().equals("threads"))
+                .findAny()
+                .orElseThrow(Error::new);
+        threadsField.setAccessible(true);
+        return (Thread[]) threadsField.get(threadPool);
+    }
+
+    private static class FactorialSupplier implements Supplier<Integer> {
         private final int n;
         private final LightFuture previousFuture;
 
