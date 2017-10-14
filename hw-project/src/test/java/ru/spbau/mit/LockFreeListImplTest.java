@@ -5,7 +5,6 @@ import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.ConcurrentSkipListSet;
 
 import static org.junit.Assert.*;
 
@@ -68,5 +67,4 @@ public class LockFreeListImplTest {
         assertFalse(list.contains(0));
         assertFalse(list.contains(null));
     }
-
 }

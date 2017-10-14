@@ -3,10 +3,10 @@ package ru.spbau.mit;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class LockFreeListImpl<T> implements LockFreeList<T> {
-    private AtomicReference<Node> tail;
+    private final AtomicReference<Node<T>> tail;
 
     public LockFreeListImpl() {
-        Node endNode = new Node(null, null);
+        Node<T> endNode = new Node<>(null, null);
         tail = new AtomicReference<>(endNode);
     }
 
@@ -18,8 +18,8 @@ public class LockFreeListImpl<T> implements LockFreeList<T> {
     @Override
     public void append(T value) {
         while (true) {
-            Node currentTail = tail.get();
-            Node newNode = new Node(value, currentTail);
+            Node<T> currentTail = tail.get();
+            Node<T> newNode = new Node<>(value, currentTail);
             assert !newNode.isEndNode();
             if (tail.compareAndSet(currentTail, newNode)) {
                 return;
@@ -29,7 +29,7 @@ public class LockFreeListImpl<T> implements LockFreeList<T> {
 
     @Override
     public boolean remove(T value) {
-        Node currentNode = tail.get();
+        Node<T> currentNode = tail.get();
 
         // tries to remove node at tail.
         while (!currentNode.isEndNode() && currentNode.equalsByValue(value)) {
@@ -40,7 +40,7 @@ public class LockFreeListImpl<T> implements LockFreeList<T> {
         }
 
         while (!currentNode.isEndNode()) {
-            final Node nextNode = currentNode.getNext();
+            final Node<T> nextNode = currentNode.getNext();
             if (nextNode.isEndNode()) {
                 break;
             }
@@ -62,35 +62,35 @@ public class LockFreeListImpl<T> implements LockFreeList<T> {
 
     private static class Node<T> {
         private final T value;
-        private final AtomicReference<Node> next;
+        private final AtomicReference<Node<T>> next;
 
-        public Node(T value, Node next) {
+        Node(T value, Node<T> next) {
             this.value = value;
             this.next = new AtomicReference<>(next);
         }
 
-        public boolean isEndNode() {
+        boolean isEndNode() {
             return value == null && next.get() == null;
         }
 
-        public boolean equalsByValue(T value) {
+        boolean equalsByValue(T value) {
             if (this.value == null) {
                 return value == null;
             }
             return this.value.equals(value);
         }
 
-        public Node getNext() {
+        Node<T> getNext() {
             return next.get();
         }
 
-        public boolean CompareAndSetNext(Node oldNext, Node newNext) {
+        boolean CompareAndSetNext(Node<T> oldNext, Node<T> newNext) {
             return next.compareAndSet(oldNext, newNext);
         }
     }
 
     private Node findByValue(T value) {
-        Node fromNode = tail.get();
+        Node<T> fromNode = tail.get();
         while (!fromNode.isEndNode() && !fromNode.equalsByValue(value)) {
             fromNode = fromNode.getNext();
         }

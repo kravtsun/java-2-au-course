@@ -16,12 +16,14 @@ public interface LockFreeList<T> {
 
     /**
      * Appends value to the end of list
+     * @param value value to append into list.
      */
     void append(T value);
 
     /**
      *
-     * @param value
+     * @param value value to compare with (by Object.equals)
+     *              when searching for item to be removed.
      * @return true if value was present.
      */
     boolean remove(T value);
