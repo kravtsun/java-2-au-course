@@ -1,8 +1,9 @@
 package ru.spbau.mit;
 
+import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class LockFreeListImpl<T> implements LockFreeList<T> {
+public class LockFreeListImpl<T> implements LockFreeList<T>, Iterable<T> {
     private final AtomicReference<Node<T>> tail;
 
     public LockFreeListImpl() {
@@ -60,6 +61,25 @@ public class LockFreeListImpl<T> implements LockFreeList<T> {
         return findByValue(value) != null;
     }
 
+    @Override
+    public Iterator<T> iterator() {
+        return new Iterator<T>() {
+            private Node<T> currentNode = tail.get();
+
+            @Override
+            public boolean hasNext() {
+                return !currentNode.isEndNode();
+            }
+
+            @Override
+            public T next() {
+                T currentValue = currentNode.value;
+                currentNode = currentNode.getNext();
+                return currentValue;
+            }
+        };
+    }
+
     private static class Node<T> {
         private final T value;
         private final AtomicReference<Node<T>> next;
@@ -74,8 +94,8 @@ public class LockFreeListImpl<T> implements LockFreeList<T> {
         }
 
         boolean equalsByValue(T value) {
-            if (this.value == null) {
-                return value == null;
+            if (value == null) {
+                return this.value == null;
             }
             return this.value.equals(value);
         }
