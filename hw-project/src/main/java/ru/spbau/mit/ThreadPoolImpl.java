@@ -1,17 +1,15 @@
 package ru.spbau.mit;
 
 import java.util.*;
-import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 
 public class ThreadPoolImpl implements ThreadPool {
     private static final Logger LOGGER = Logger.getLogger("ThreadPool");
     private final Thread[] threads;
-
     private final Queue<Runnable> taskQueue;
 
-    ThreadPoolImpl(int n) {
+    public ThreadPoolImpl(int n) {
         this.threads = new Thread[n];
         this.taskQueue = new LinkedList<>();
         final Runnable threadTask = () -> {
@@ -41,9 +39,6 @@ public class ThreadPoolImpl implements ThreadPool {
                             taskQueue.wait();
                         }
                     } catch (InterruptedException e) {
-                        // TODO differentiate InterruptedException from task with
-                        // InterruptedException for thread (coming from ThreadPool.shutdown())
-                        // Possible solution: ThreadPool.shutdownInitiated field.
                         break;
                     }
                 }
@@ -64,10 +59,7 @@ public class ThreadPoolImpl implements ThreadPool {
 
     @Override
     public <R> LightFuture<R> addTask(Supplier<R> task) {
-        final LightFutureImpl<R> future = new LightFutureImpl<>(this);
-        Callable<R> callable = task::get;
-        addRunnable(future.getRunnable(callable));
-        return future;
+        return new LightFutureImpl<>(this, task::get, null);
     }
 
     @Override
@@ -87,7 +79,7 @@ public class ThreadPoolImpl implements ThreadPool {
         LOGGER.info("shutdown finished");
     }
 
-    private <R> void addRunnable(Runnable runnable) {
+    void addRunnable(Runnable runnable) {
         synchronized (taskQueue) {
             final boolean added = taskQueue.add(runnable);
             if (!added) {
@@ -95,17 +87,5 @@ public class ThreadPoolImpl implements ThreadPool {
             }
             taskQueue.notify();
         }
-    }
-
-    <R, R2> LightFuture<R2> addDependentTask(LightFutureImpl<R> child,
-                                            Function<? super R, ? extends R2> function) {
-        final LightFutureImpl<R2> future = new LightFutureImpl<>(this);
-        Runnable runnable = future.getRunnable(() -> {
-            R arg = child.get();
-            R2 result = function.apply(arg);
-            return result;
-        });
-        addRunnable(runnable);
-        return future;
     }
 }

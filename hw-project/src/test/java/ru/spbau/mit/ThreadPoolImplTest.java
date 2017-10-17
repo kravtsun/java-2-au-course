@@ -15,8 +15,10 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Semaphore;
 import java.util.function.BiConsumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -37,8 +39,9 @@ public class ThreadPoolImplTest {
 
     @Parameters
     public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {
-                {1}, {2}, {4}, {8}, {12}, {16}, {32}
+        return Arrays.asList(new Object[][]{
+//                {1},
+                {2}, {4}, {8}, {12}, {16}, {32}
         });
     }
 
@@ -81,19 +84,19 @@ public class ThreadPoolImplTest {
 
         BiConsumer<Class, Supplier<Void>> checkThrowable =
                 (Class throwableClass, Supplier<Void> throwSupplier) -> {
-            LightFuture<Void> future = threadPool.addTask(throwSupplier);
-            Throwable t = null;
-            try {
-                future.get();
-            } catch (Throwable caught) {
-                t = caught;
-            }
-            assertNotNull(t);
-            assertEquals(t.getClass(), LightExecutionException.class);
-            LightExecutionException lightExecutionException = (LightExecutionException) t;
-            Throwable cause = lightExecutionException.getCause();
-            assertEquals(throwableClass, cause.getClass());
-        };
+                    LightFuture<Void> future = threadPool.addTask(throwSupplier);
+                    Throwable t = null;
+                    try {
+                        future.get();
+                    } catch (Throwable caught) {
+                        t = caught;
+                    }
+                    assertNotNull(t);
+                    assertEquals(t.getClass(), LightExecutionException.class);
+                    LightExecutionException lightExecutionException = (LightExecutionException) t;
+                    Throwable cause = lightExecutionException.getCause();
+                    assertEquals(throwableClass, cause.getClass());
+                };
 
         for (Class throwableClass : throwableClasses) {
             Supplier<Void> throwSupplier = () -> {
@@ -217,6 +220,28 @@ public class ThreadPoolImplTest {
         LOGGER.info("activeThreadsCount = " + activeThreadsCount);
         assertEquals(nthreads, activeThreadsCount);
         threadPool.shutdown();
+    }
+
+    @Test(timeout = TEST_TIMEOUT)
+    public void addingToThreadPoolTaskTest() throws Exception {
+        LightFuture[] futures = new LightFuture[nthreads];
+        Function<Integer, Integer> function = (j) -> 2 * j;
+        CyclicBarrier cyclicBarrier = new CyclicBarrier(nthreads);
+        for (int i = 0; i < nthreads; ++i) {
+            int finalI1 = i;
+            LightFuture<Integer> innerFuture = threadPool.addTask(() -> {
+                try {
+                    cyclicBarrier.await();
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+                return finalI1;
+            });
+            futures[i] = innerFuture.thenApply(function);
+        }
+        for (int i = 0; i < nthreads; ++i) {
+            assertEquals(function.apply(i), futures[i].get());
+        }
     }
 
     private void factorialTask(int n) throws LightExecutionException {

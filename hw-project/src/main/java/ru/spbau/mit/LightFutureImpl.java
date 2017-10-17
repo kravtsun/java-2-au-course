@@ -1,5 +1,7 @@
 package ru.spbau.mit;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.function.Function;
 
 public class LightFutureImpl<R> implements LightFuture<R> {
@@ -11,8 +13,23 @@ public class LightFutureImpl<R> implements LightFuture<R> {
     private volatile R result;
     private volatile Throwable throwable;
 
-    LightFutureImpl(ThreadPoolImpl threadPool) {
+    private Collection<Runnable> taskChildren;
+
+    public <R2> LightFutureImpl(ThreadPoolImpl threadPool, Callable<R> callable, LightFutureImpl<R2> parent) {
         this.threadPool = threadPool;
+        this.taskChildren = new ArrayList<>();
+        Runnable runnable = getRunnable(callable);
+        if (parent == null) {
+            threadPool.addRunnable(runnable);
+        } else {
+            synchronized (parent) {
+                if (parent.isReady()) {
+                    threadPool.addRunnable(runnable);
+                } else {
+                    parent.taskChildren.add(runnable);
+                }
+            }
+        }
     }
 
     @Override
@@ -38,10 +55,14 @@ public class LightFutureImpl<R> implements LightFuture<R> {
 
     @Override
     public <R2> LightFuture<R2> thenApply(Function<? super R, ? extends R2> function) {
-        return threadPool.addDependentTask(this, function);
+        Callable<R2> callable = () -> {
+            R arg = this.get();
+            return function.apply(arg);
+        };
+        return new LightFutureImpl<>(threadPool, callable, this);
     }
 
-    Runnable getRunnable(Callable<R> callable) {
+    private Runnable getRunnable(Callable<R> callable) {
         return () -> {
             try {
                 setResult(callable.call());
@@ -52,6 +73,10 @@ public class LightFutureImpl<R> implements LightFuture<R> {
             }
             synchronized (this) {
                 notifyAll();
+                for (Runnable runnable : taskChildren) {
+                    threadPool.addRunnable(runnable);
+                }
+                taskChildren = null;
             }
         };
     }
@@ -88,5 +113,3 @@ public class LightFutureImpl<R> implements LightFuture<R> {
         return result;
     }
 }
-
-// TODO try to get rid of synchronized.
