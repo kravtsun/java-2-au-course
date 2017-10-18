@@ -67,4 +67,15 @@ public class LockFreeListImplTest {
         assertFalse(list.contains(0));
         assertFalse(list.contains(null));
     }
+
+    @Test
+    public void nullTest() throws Exception {
+        assertFalse(list.contains(null));
+        list.append(null);
+        assertTrue(list.contains(null));
+        assertFalse(list.isEmpty());
+        assertTrue(list.remove(null));
+        assertFalse(list.contains(null));
+        assertTrue(list.isEmpty());
+    }
 }

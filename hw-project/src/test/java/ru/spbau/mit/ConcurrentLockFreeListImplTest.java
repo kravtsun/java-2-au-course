@@ -1,6 +1,5 @@
 package ru.spbau.mit;
 
-import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -10,31 +9,34 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 @RunWith(Parameterized.class)
 public class ConcurrentLockFreeListImplTest {
-    @Parameters
-    public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] {
-                {2}, {4}, {8}, {16}, {32}, {50}, {100}, {256}, {1024}, {4098}, {16392},
-                {65568}, {262272}, {1049088}
-        });
-    }
-
     private final int listLength;
     private final LockFreeListImpl<Integer> list;
-
     public ConcurrentLockFreeListImplTest(int listLength) {
         this.listLength = listLength;
         this.list = new LockFreeListImpl<>();
-//        this.list = new SynchronizedList<>();
     }
 
-    @Test
-    public void AppendRemoveEvenTest() {
+    @Parameters
+    public static Collection<Object[]> data() {
+        return Arrays.asList(new Object[][] {
+                {2}, {4}, {8}, {16}, {32}, {50}, {100}, {256}, {1024}, {4096}, {8192}
+        });
+    }
+
+    @Test(timeout = 30000)
+    public void appendRemoveEvenTest() {
         CyclicBarrier startBarrier = new CyclicBarrier(2);
         CountDownLatch finishLatch = new CountDownLatch(2);
 
+        AtomicInteger currentNumber = new AtomicInteger(0);
         Thread adderThread = new Thread(() -> {
             try {
                 startBarrier.await();
@@ -43,6 +45,12 @@ public class ConcurrentLockFreeListImplTest {
             }
             for (int i = 0; i < listLength; i++) {
                 list.append(2 * i);
+                currentNumber.set(2 * i);
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
                 list.append(2 * i + 1);
             }
             finishLatch.countDown();
@@ -54,8 +62,8 @@ public class ConcurrentLockFreeListImplTest {
                 throw new RuntimeException(e);
             }
             for (int i = 0; i < 2 * listLength; i++) {
-                Integer value = list.iterator().next();
-                if (value != null && value % 2 == 0) {
+                Integer value = currentNumber.get();
+                if (value % 2 == 0) {
                     list.remove(value);
                 }
             }
@@ -71,14 +79,44 @@ public class ConcurrentLockFreeListImplTest {
             throw new RuntimeException(e);
         }
 
-        int[] elementsCounter = new int[2 * listLength];
-
-        for (Integer value : list) {
-            elementsCounter[value]++;
+        for (int i = 0; i < listLength; i++) {
+            list.contains(2 * i  + 1);
         }
+    }
+
+    @Test(timeout = 30000)
+    public void allRemoveTest() throws InterruptedException {
+        if (listLength > 10000) {
+            return;
+        }
+
+        CyclicBarrier startBarrier = new CyclicBarrier(listLength);
+        CountDownLatch finishLatch = new CountDownLatch(listLength);
+
+        Thread[] threads = new Thread[listLength];
+        Exception[] exceptions = new Exception[listLength];
+
+        for (int i = listLength - 1; i >= 0; i--) {
+            list.append(i);
+            int finalI = i;
+            threads[i] = new Thread(() -> {
+                try {
+                    startBarrier.await();
+                    assertTrue(list.remove(finalI));
+                } catch (Exception e) {
+                    exceptions[finalI] = e;
+                }
+                finishLatch.countDown();
+            });
+            threads[i].start();
+        }
+
+        finishLatch.await();
 
         for (int i = 0; i < listLength; i++) {
-            Assert.assertNotEquals(0, elementsCounter[2 * i + 1]);
+            assertNull(exceptions[i]);
+            assertFalse(list.contains(i));
         }
+        assertTrue(list.isEmpty());
     }
 }
