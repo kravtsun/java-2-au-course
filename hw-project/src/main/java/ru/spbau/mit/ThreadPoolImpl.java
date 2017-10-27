@@ -10,23 +10,15 @@ public class ThreadPoolImpl implements ThreadPool {
     private final Queue<Runnable> taskQueue;
 
     public ThreadPoolImpl(int n) {
-        this.threads = new Thread[n];
-        this.taskQueue = new LinkedList<>();
+        threads = new Thread[n];
+        taskQueue = new LinkedList<>();
         final Runnable threadTask = () -> {
-            while (true) {
+            while (!Thread.currentThread().isInterrupted()) {
                 Runnable nextTask = null;
                 synchronized (taskQueue) {
-                    try {
-                        if (!taskQueue.isEmpty()) {
-                            nextTask = taskQueue.remove();
-                        }
-                    } catch (NoSuchElementException ignored) {
-                        // some other thread intercepted task.
+                    if (!taskQueue.isEmpty()) {
+                        nextTask = taskQueue.remove();
                     }
-                }
-
-                if (Thread.currentThread().isInterrupted()) {
-                    break;
                 }
 
                 if (nextTask != null) {
@@ -47,12 +39,12 @@ public class ThreadPoolImpl implements ThreadPool {
 
         // Initializing threads.
         for (int i = 0; i < n; i++) {
-            this.threads[i] = new Thread(threadTask);
+            threads[i] = new Thread(threadTask);
         }
 
         // Starting threads.
         for (int i = 0; i < n; i++) {
-            this.threads[i].start();
+            threads[i].start();
         }
         // TODO start daemon thread to notify worker threads if taskQueue is not empty.
     }
@@ -71,20 +63,13 @@ public class ThreadPoolImpl implements ThreadPool {
             for (Thread thread : threads) {
                 thread.interrupt();
             }
-
-            synchronized (taskQueue) {
-                taskQueue.notifyAll();
-            }
         }
         LOGGER.info("shutdown finished");
     }
 
     void addRunnable(Runnable runnable) {
         synchronized (taskQueue) {
-            final boolean added = taskQueue.add(runnable);
-            if (!added) {
-                throw new Error("addTask: taskQueue inconsistent state:");
-            }
+            taskQueue.add(runnable);
             taskQueue.notify();
         }
     }

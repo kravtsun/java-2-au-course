@@ -6,18 +6,15 @@ import java.util.function.Function;
 
 public class LightFutureImpl<R> implements LightFuture<R> {
     private final ThreadPoolImpl threadPool;
-
-    // get() method support - should be visible from any thread calling LightFutureImpl.get()
-    // ready is set true atomically with result.
-    private volatile boolean ready = false;
+    private volatile boolean ready;
     private volatile R result;
     private volatile Throwable throwable;
-
     private Collection<Runnable> taskChildren;
 
     public <R2> LightFutureImpl(ThreadPoolImpl threadPool, Callable<R> callable, LightFutureImpl<R2> parent) {
         this.threadPool = threadPool;
-        this.taskChildren = new ArrayList<>();
+        ready = false;
+        taskChildren = new ArrayList<>();
         Runnable runnable = getRunnable(callable);
         if (parent == null) {
             threadPool.addRunnable(runnable);
@@ -47,7 +44,7 @@ public class LightFutureImpl<R> implements LightFuture<R> {
                 try {
                     wait();
                 } catch (InterruptedException e) {
-                    throw new RuntimeException();
+                    throw new RuntimeException(e);
                 }
             }
         }
@@ -56,7 +53,7 @@ public class LightFutureImpl<R> implements LightFuture<R> {
     @Override
     public <R2> LightFuture<R2> thenApply(Function<? super R, ? extends R2> function) {
         Callable<R2> callable = () -> {
-            R arg = this.get();
+            R arg = get();
             return function.apply(arg);
         };
         return new LightFutureImpl<>(threadPool, callable, this);
@@ -82,30 +79,22 @@ public class LightFutureImpl<R> implements LightFuture<R> {
     }
 
     private void setResult(R result) {
-        if (this.result != null) {
-            throw new Error("LightFuture: invalid state: result is already set.");
-        }
+        assert this.result == null;
         this.result = result;
     }
 
     private void setReady() {
-        if (this.ready) {
-            throw new Error("LightFuture: invalid state: ready is already set.");
-        }
-        this.ready = true;
+        assert !ready;
+        ready = true;
     }
 
     private void setException(Throwable throwable) {
-        if (this.throwable != null) {
-            throw new Error("LightFuture: invalid state: throwable is already set.");
-        }
+        assert this.throwable == null;
         this.throwable = throwable;
     }
 
     private R getResult() throws LightExecutionException {
-        if (!ready) {
-            throw new Error("LightFuture: invalid state: ready is already set.");
-        }
+        assert ready;
         if (throwable != null) {
             Throwable cause = throwable;
             throw new LightExecutionException(cause);

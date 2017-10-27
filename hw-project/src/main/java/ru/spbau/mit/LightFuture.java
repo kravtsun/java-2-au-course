@@ -5,15 +5,8 @@ import java.util.function.Function;
 //    Задачи, принятные к исполнению, представлены в виде объектов интерфейса LightFuture
 public interface LightFuture<R> {
     class LightExecutionException extends Exception {
-        private final Throwable cause;
-
         LightExecutionException(Throwable cause) {
-            this.cause = cause;
-        }
-
-        @Override
-        public Throwable getCause() {
-            return cause;
+            super(cause);
         }
     }
 

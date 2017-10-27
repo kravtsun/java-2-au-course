@@ -37,11 +37,11 @@ public class ThreadPoolImplTest {
         this.nthreads = nthreads;
     }
 
+    // Sometimes this parameters are used just for repeating the same test.
     @Parameters
     public static Collection<Object[]> data() {
         return Arrays.asList(new Object[][]{
-//                {1},
-                {2}, {4}, {8}, {12}, {16}, {32}
+                {1}, {2}, {4}, {8}, {12}, {16}, {32}
         });
     }
 
@@ -242,6 +242,34 @@ public class ThreadPoolImplTest {
         for (int i = 0; i < nthreads; ++i) {
             assertEquals(function.apply(i), futures[i].get());
         }
+    }
+
+    @Test(timeout = TEST_TIMEOUT)
+    public void threeTasksBottleneckTest() throws Exception {
+        ThreadPool threadPool = new ThreadPoolImpl(2);
+
+        LightFuture<Integer> longParentTask = threadPool.addTask(() -> {
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                throw new Error();
+            }
+            return 1;
+        });
+
+        LightFuture<Integer> childTask = longParentTask.thenApply((i) -> 2 * i);
+        final Integer simpleTaskResult = 42;
+        LightFuture<Integer> otherTask = threadPool.addTask(() -> {
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                throw new Error();
+            }
+            return simpleTaskResult;
+        });
+        assertEquals(simpleTaskResult, otherTask.get());
+        assertEquals((Integer) 1, longParentTask.get());
+        assertEquals((Integer) 2, childTask.get());
     }
 
     private void factorialTask(int n) throws LightExecutionException {
