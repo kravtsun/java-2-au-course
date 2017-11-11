@@ -1,17 +1,18 @@
-package ru.spbau.mit;
+package ru.spbau.mit.ftp;
 
 import org.apache.commons.cli.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import ru.spbau.mit.ftp.protocol.ListRequest;
+import ru.spbau.mit.ftp.protocol.Request;
+import ru.spbau.mit.ftp.protocol.SimpleRequest;
 
 import java.io.*;
 import java.net.Socket;
-import java.util.Objects;
 import java.util.Scanner;
-import java.util.concurrent.atomic.AtomicInteger;
 
-public class FTPClient {
-    private static Logger logger = LogManager.getLogger("client");
+public class Client {
+    private static final Logger logger = LogManager.getLogger("client");
 
     public static void main(String []args)
     {
@@ -43,7 +44,7 @@ public class FTPClient {
 
         String listRequestPrefix = "list ";
         try (PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))
         ) {
             Scanner scanner = new Scanner(System.in);
             String msg = in.readLine();
@@ -51,12 +52,12 @@ public class FTPClient {
 
             String command;
             while ((command = scanner.nextLine()) != null) {
-                FTPProtocol.Request request;
+                Request request;
                 if (command.length() > listRequestPrefix.length() &&
                         command.substring(0, listRequestPrefix.length()).equals(listRequestPrefix)) {
-                    request = new FTPProtocol.ListRequest(command.substring(5));
+                    request = new ListRequest(command.substring(5));
                 } else {
-                    request = new FTPProtocol.SimpleRequest(command);
+                    request = new SimpleRequest(command);
                 }
                 logger.info("sent: " + request.str());
                 out.println(request.str());
