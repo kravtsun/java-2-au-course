@@ -1,14 +1,14 @@
 package ru.spbau.mit;
-import com.sun.security.ntlm.Server;
+
 import org.apache.commons.cli.*;
 
 import java.io.*;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -19,11 +19,11 @@ public class FTPServer implements Closeable {
     private final File rootDir;
     private volatile boolean interrupt = false;
 
-    public static void main(String []args) {
+    public static void main(String[] args) {
         CommandLineParser parser = new DefaultParser();
         Options options = new Options();
         options.addRequiredOption(null, "port", true, "Port to start listening at");
-        options.addOption("j", "threads",true,"number of worker threads to run");
+        options.addOption("j", "threads", true, "number of worker threads to run");
         int portNumber = 0;
         int nthreads = 0;
         try {
@@ -78,10 +78,13 @@ public class FTPServer implements Closeable {
 
     private static class FTPServerSession implements Runnable {
         private static Logger logger = LogManager.getLogger("session");
+        private static AtomicInteger sessionsCount = new AtomicInteger(0);
         private final Socket socket;
+        private final int sessionId;
 
         FTPServerSession(Socket socket) {
             this.socket = socket;
+            this.sessionId = sessionsCount.incrementAndGet();
         }
 
         @Override
@@ -91,43 +94,48 @@ public class FTPServer implements Closeable {
                     BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))
             ) {
                 String inputLine, outputLine;
-                logger.info("initializing FTPProtocol");
+                logInfo("initializing FTPProtocol");
                 FTPProtocol ftpProtocol = new FTPProtocol();
                 outputLine = ftpProtocol.processInput(null);
                 out.println(outputLine);
 
-                logger.info("starting IO loop");
+                logInfo("starting IO loop");
                 while ((inputLine = in.readLine()) != null) {
-                    logger.info("received: " + inputLine);
+                    logInfo("received: " + inputLine);
                     outputLine = ftpProtocol.processInput(inputLine);
                     out.println(outputLine);
-                    logger.info("sent: " + outputLine);
+                    logInfo("sent: " + outputLine);
                     if (outputLine.equals("Bye")) {
                         break;
                     }
                 }
-                logger.info("closing socket");
+                logInfo("closing socket");
                 socket.close();
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            logger.info("exiting...");
+            logInfo("exiting...");
         }
-    }
 
+        private void logInfo(String message) {
+            logger.info(String.format("#%d: %s", sessionId, message));
+        }
 
-    private static class FTPProtocol {
-        String processInput(String clientInput) {
-            if (clientInput == null) {
-                // protocol initiation
-                return "Hi from server";
-            } else if (clientInput.equals("exit")) {
-                // client wants to exit.
-                return "Bye";
-            } else {
-                return "Unknown command: " + clientInput;
+        private class FTPProtocol {
+            String processInput(String clientInput) {
+                if (clientInput == null) {
+                    // protocol initiation
+                    return "Hi from server, session #" + FTPServerSession.this.sessionId;
+                } else if (clientInput.equals("exit")) {
+                    // client wants to exit.
+                    return "Bye";
+                } else {
+                    return "Unknown command: " + clientInput;
+                }
             }
-        };
+
+            ;
+        }
     }
 
     public class FTPServerException extends Exception {
