@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import ru.spbau.mit.FTPProtocol.Request;
 
 public class FTPServer implements Closeable {
     private static Logger logger = LogManager.getLogger("server");
@@ -93,48 +94,45 @@ public class FTPServer implements Closeable {
                     PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
                     BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))
             ) {
-                String inputLine, outputLine;
-                logInfo("initializing FTPProtocol");
-                FTPProtocol ftpProtocol = new FTPProtocol();
-                outputLine = ftpProtocol.processInput(null);
-                out.println(outputLine);
+                logger.info(logMessage("initializing FTPProtocol"));
+                out.println("Hello from server, session #" + sessionId);
 
-                logInfo("starting IO loop");
-                while ((inputLine = in.readLine()) != null) {
-                    logInfo("received: " + inputLine);
-                    outputLine = ftpProtocol.processInput(inputLine);
-                    out.println(outputLine);
-                    logInfo("sent: " + outputLine);
-                    if (outputLine.equals("Bye")) {
+                logger.info(logMessage("starting IO loop"));
+                while (true) {
+                    String inputLine = in.readLine();
+                    if (inputLine == null) {
                         break;
                     }
+                    logger.info(logMessage("received: " + inputLine));
+                    FTPProtocol.SentEntity response;
+                    try {
+                        Request request = FTPProtocol.parseRequest(inputLine);
+                        if (request instanceof FTPProtocol.ListRequest) {
+                            String path = ((FTPProtocol.ListRequest) request).getPath();
+                            File[] files = new File(path).listFiles();
+                            response = new FTPProtocol.ListResponse(files);
+//                        } else if (request instanceof FTPProtocol.SimpleRequest) {
+//                            response = new FTPProtocol.SimpleResponse("received request: " + request.requestBody());
+                        } else {
+                            response = new FTPProtocol.SimpleResponse("Unknown request: " + inputLine);
+                        }
+                    } catch (FTPProtocol.FTPProtocolException e) {
+                        logger.error(logMessage(e.getMessage()));
+                        response = new FTPProtocol.SimpleResponse("FTPProtocol exception: " + e.getMessage());
+                    }
+                    out.println(response.str());
+                    logger.info(logMessage("sent: " + response.str()));
                 }
-                logInfo("closing socket");
+                logger.info(logMessage("closing socket"));
                 socket.close();
-            } catch (IOException e) {
-                e.printStackTrace();
+            } catch (Exception e) {
+                logger.error(logMessage(e.getMessage()));
             }
-            logInfo("exiting...");
+            logger.info(logMessage("exiting..."));
         }
 
-        private void logInfo(String message) {
-            logger.info(String.format("#%d: %s", sessionId, message));
-        }
-
-        private class FTPProtocol {
-            String processInput(String clientInput) {
-                if (clientInput == null) {
-                    // protocol initiation
-                    return "Hi from server, session #" + FTPServerSession.this.sessionId;
-                } else if (clientInput.equals("exit")) {
-                    // client wants to exit.
-                    return "Bye";
-                } else {
-                    return "Unknown command: " + clientInput;
-                }
-            }
-
-            ;
+        private String logMessage(String message) {
+            return String.format("#%d: %s", sessionId, message);
         }
     }
 

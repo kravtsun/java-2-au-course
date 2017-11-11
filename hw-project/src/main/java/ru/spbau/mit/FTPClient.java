@@ -4,10 +4,7 @@ import org.apache.commons.cli.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.Socket;
 import java.util.Objects;
 import java.util.Scanner;
@@ -16,13 +13,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class FTPClient {
     private static Logger logger = LogManager.getLogger("client");
 
-    public static void main(String []args) {
+    public static void main(String []args)
+    {
         CommandLineParser parser = new DefaultParser();
         Options options = new Options();
         options.addRequiredOption(null, "host", true, "Host address");
         options.addRequiredOption(null, "port", true, "Port to start listening at");
-        int portNumber = 0;
-        String hostName = null;
+        int portNumber;
+        String hostName;
         Socket socket;
         try {
             logger.info("Parsing options: " + options);
@@ -43,6 +41,7 @@ public class FTPClient {
             return;
         }
 
+        String listRequestPrefix = "list ";
         try (PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
              BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         ) {
@@ -52,10 +51,19 @@ public class FTPClient {
 
             String command;
             while ((command = scanner.nextLine()) != null) {
-                logger.info("sent: " + command);
-                out.println(command);
+                FTPProtocol.Request request;
+                if (command.length() > listRequestPrefix.length() &&
+                        command.substring(0, listRequestPrefix.length()).equals(listRequestPrefix)) {
+                    request = new FTPProtocol.ListRequest(command.substring(5));
+                } else {
+                    request = new FTPProtocol.SimpleRequest(command);
+                }
+                logger.info("sent: " + request.str());
+                out.println(request.str());
+
                 msg = in.readLine();
                 logger.info("received: " + msg);
+
                 if (command.equals("exit")) {
                     break;
                 }
@@ -63,7 +71,5 @@ public class FTPClient {
         } catch (IOException e) {
             e.printStackTrace();
         }
-
-
     }
 }
