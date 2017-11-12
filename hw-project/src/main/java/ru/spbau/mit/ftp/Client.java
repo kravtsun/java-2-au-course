@@ -3,9 +3,7 @@ package ru.spbau.mit.ftp;
 import org.apache.commons.cli.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import ru.spbau.mit.ftp.protocol.ListRequest;
-import ru.spbau.mit.ftp.protocol.Request;
-import ru.spbau.mit.ftp.protocol.SimpleRequest;
+import ru.spbau.mit.ftp.protocol.*;
 
 import java.io.*;
 import java.net.Socket;
@@ -15,11 +13,10 @@ import java.util.Scanner;
 public class Client extends AbstractClient {
     private static final Logger logger = LogManager.getLogger("client");
     private Socket socket;
-    private PrintWriter out;
-    private BufferedReader in;
+    private DataOutputStream out;
+    private DataInputStream in;
 
-    public static void main(String []args)
-    {
+    public static void main(String []args) {
         CommandLineParser parser = new DefaultParser();
         Options options = new Options();
         options.addRequiredOption(null, "host", true, "Host address");
@@ -58,7 +55,7 @@ public class Client extends AbstractClient {
                     client.executeSimple(command);
                 }
 
-                if (command.equals("exit")) {
+                if (command.equals(SimpleRequest.EXIT_MESSAGE)) {
                     break;
                 }
             }
@@ -72,10 +69,12 @@ public class Client extends AbstractClient {
     public void connect(String hostName, int port) throws IOException {
         logger.info(String.format("Starting socket for %s:%d", hostName, port));
         socket = new Socket(hostName, port);
-        out = new PrintWriter(socket.getOutputStream(), true);
-        in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        String msg = in.readLine();
+
+        out = new DataOutputStream(socket.getOutputStream());
+//        out = new PrintWriter(socket.getOutputStream(), true); DO NOT FORGET TO FLUSH!!!
+        in = new DataInputStream(socket.getInputStream());
         // receiving hello from server.
+        String msg = in.readUTF();
         logger.info("received: " + msg);
     }
 
@@ -97,7 +96,8 @@ public class Client extends AbstractClient {
             throw new ClientNotConnectedException();
         }
         ListRequest request = new ListRequest(path);
-        executeRequest(request);
+        ListResponse response = new ListResponse();
+        executeRequest(request, response);
     }
 
     @Override
@@ -113,15 +113,15 @@ public class Client extends AbstractClient {
             throw new ClientNotConnectedException();
         }
         SimpleRequest request = new SimpleRequest(message);
-        executeRequest(request);
+        SimpleResponse response = new SimpleResponse();
+        executeRequest(request, response);
     }
 
-    private void executeRequest(Request request) throws IOException {
-        logger.info("sent: " + request.str());
-        out.println(request.str());
-        String msg = in.readLine();
-        byte[] bytes = Base64.getMimeDecoder().decode(msg);
-        String bytesString = new String(bytes);
-        logger.info("received: " + bytesString);
+    private void executeRequest(Request request, Response response) throws IOException {
+        logger.info("sent: " + request.toString() + ": " + request.debugString());
+        request.write(out);
+        out.flush();
+        response.read(in);
+        logger.info("received: " + response.toString() + ": " + response.debugString());
     }
 }

@@ -49,7 +49,7 @@ public class Server extends AbstractServer {
             while (!server.isFinished) {
                 String command = scanner.nextLine();
                 logger.info("server command: " + command);
-                if (command.equals("exit")) {
+                if (command.equals(SimpleRequest.EXIT_MESSAGE)) {
                     break;
                 }
             }
@@ -112,41 +112,37 @@ public class Server extends AbstractServer {
         @Override
         public void run() {
             try (
-                    PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-                    BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))
+                    DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                    DataInputStream in = new DataInputStream(socket.getInputStream())
             ) {
-                logger.info(logMessage("initializing Protocol"));
-                out.println("Hello from server, session #" + sessionId);
-
+                out.writeUTF("Hello from server, session #" + sessionId);
                 logger.info(logMessage("starting IO loop"));
                 while (true) {
-                    String inputLine = in.readLine();
-                    if (inputLine == null) {
-                        break;
-                    }
-                    logger.info(logMessage("received: " + inputLine));
                     SentEntity response;
+                    boolean receivedExitMessage = false;
                     try {
-                        Request request = Protocol.parseRequest(inputLine);
+                        Request request = Request.parse(in);
+                        logger.info("received: " + request + ": " + request.debugString());
                         if (request instanceof ListRequest) {
                             String path = ((ListRequest) request).getPath();
                             File[] files = new File(path).listFiles();
                             response = new ListResponse(files);
-//                        } else if (request instanceof Protocol.SimpleRequest) {
-//                            response = new Protocol.SimpleResponse("received request: " + request.requestBody());
+                        } else if (request instanceof SimpleRequest) {
+                            String receivedMessage = ((SimpleRequest) request).getMessage();
+                            receivedExitMessage = receivedMessage.equals(SimpleRequest.EXIT_MESSAGE);
+                            response = new SimpleResponse("received request with message: " + receivedMessage);
                         } else {
-                            response = new SimpleResponse("Unknown request: " + inputLine);
+                            response = new SimpleResponse("Unknown request: " + request);
                         }
-                    } catch (Protocol.FTPProtocolException e) {
+                    } catch (Exception e) {
                         logger.error(logMessage(e.getMessage()));
-                        response = new SimpleResponse("Protocol exception: " + e.getMessage());
+                        response = new SimpleResponse("Dealing request exception: " + e.getMessage());
                     }
-                    byte[] lineSeparator = new byte[0];
-                    String encodedMessage = Base64
-                            .getMimeEncoder(-1, lineSeparator)
-                            .encodeToString(response.str().getBytes());
-                    out.println(encodedMessage);
-                    logger.info(logMessage("sent: " + response.str()));
+                    response.write(out);
+                    logger.info(logMessage("sent: " + response + ": " + response.debugString()));
+                    if (receivedExitMessage) {
+                        break;
+                    }
                 }
                 logger.info(logMessage("closing socket"));
                 socket.close();
