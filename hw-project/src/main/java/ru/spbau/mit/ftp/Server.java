@@ -4,9 +4,13 @@ import org.apache.commons.cli.*;
 
 import java.io.*;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.StandardSocketOptions;
 import java.nio.channels.AsynchronousCloseException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -20,6 +24,8 @@ public class Server extends AbstractServer implements Closeable {
     private static final Logger logger = LogManager.getLogger("server");
     private final ExecutorService executorService;
     private ServerSocketChannel serverSocketChannel;
+
+    private List<SocketChannel> sockets = new ArrayList<>();
 
     public static void main(String[] args) {
         CommandLineParser parser = new DefaultParser();
@@ -86,6 +92,7 @@ public class Server extends AbstractServer implements Closeable {
                     }
                     SocketChannel socketChannel = serverSocketChannel.accept();
                     if (socketChannel != null) {
+                        sockets.add(socketChannel);
                         executorService.submit(new FTPServerSession(socketChannel));
                     }
                 }
@@ -108,10 +115,11 @@ public class Server extends AbstractServer implements Closeable {
     @Override
     public synchronized void stop() throws IOException {
         if (serverSocketChannel != null) {
-            serverSocketChannel.close();
-            while (serverSocketChannel.isOpen()) {
-                Thread.yield();
+            for (SocketChannel socket : sockets) {
+                socket.close();
             }
+            sockets.clear();
+            serverSocketChannel.close();
         }
     }
 
@@ -134,7 +142,8 @@ public class Server extends AbstractServer implements Closeable {
         @Override
         public void run() {
             try {
-                SentEntity.writeString(socketChannel, "Hello from server, session #" + sessionId);
+                EchoResponse.INIT_RESPONSE.write(socketChannel);
+//                SentEntity.writeString(socketChannel, "Hello from server, session #" + sessionId);
                 logger.info(logMessage("starting IO loop"));
                 while (true) {
                     SentEntity response;
@@ -143,8 +152,12 @@ public class Server extends AbstractServer implements Closeable {
                     logger.info("received: " + request + ": " + request.debugString());
                     if (request instanceof EchoRequest) {
                         String receivedMessage = ((EchoRequest) request).getMessage();
-                        receivedExitMessage = receivedMessage.equals(EchoRequest.EXIT_MESSAGE);
-                        response = new EchoResponse(receivedMessage);
+                        if (receivedMessage.equals(EchoRequest.EXIT_MESSAGE)) {
+                            receivedExitMessage = true;
+                            response = EchoResponse.EXIT_RESPONSE;
+                        } else {
+                            response = new EchoResponse(receivedMessage);
+                        }
                     } else if (request instanceof ListRequest) {
                         String path = ((ListRequest) request).getPath();
                         File[] files = new File(path).listFiles();
@@ -168,6 +181,11 @@ public class Server extends AbstractServer implements Closeable {
                 logger.info(logMessage("closing socket"));
             } catch (Exception e) {
                 logger.error(logMessage(e.toString()));
+                try {
+                    EchoResponse.EXIT_RESPONSE.write(socketChannel);
+                } catch (IOException e1) {
+                    logger.error(logMessage(e1.toString()));
+                }
             }
             try {
                 socketChannel.close();

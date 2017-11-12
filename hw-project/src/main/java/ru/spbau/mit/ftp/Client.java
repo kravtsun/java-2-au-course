@@ -59,6 +59,7 @@ public class Client extends AbstractClient implements Closeable {
                 }
 
                 if (command.equals(EchoRequest.EXIT_MESSAGE)) {
+                    client.executeExit();
                     break;
                 }
             }
@@ -72,57 +73,80 @@ public class Client extends AbstractClient implements Closeable {
     }
 
     @Override
-    public void connect(String hostName, int port) throws IOException {
+    public synchronized EchoResponse connect(String hostName, int port) throws IOException {
         logger.info(String.format("Starting socket for %s:%d", hostName, port));
         socketChannel = SocketChannel.open();
         socketChannel.connect(new InetSocketAddress(hostName, port));
-        // receiving hello from server.
-        String msg = SentEntity.readString(socketChannel);
-        logger.debug("received hello: " + msg);
+        EchoResponse response = new EchoResponse();
+        response.read(socketChannel);
+        logger.debug("received hello: " + response.debugString());
+        return response;
     }
 
     @Override
-    public void disconnect() throws IOException {
+    public synchronized void disconnect() throws IOException {
         if (socketChannel != null) {
-            socketChannel.close();
+            if (socketChannel.isConnected()) {
+                executeExit();
+                socketChannel.close();
+            }
+            socketChannel = null;
         }
-        socketChannel = null;
     }
 
     @Override
-    public void close() throws IOException {
+    public synchronized void close() throws IOException {
         disconnect();
     }
 
     @Override
-    public void executeList(String path) throws ClientNotConnectedException, IOException {
-        if (!socketChannel.isConnected()) {
+    public synchronized ListResponse executeList(String path) throws ClientNotConnectedException, IOException {
+        if (!isConnected()) {
             throw new ClientNotConnectedException();
         }
         ListRequest request = new ListRequest(path);
         ListResponse response = new ListResponse();
         executeRequest(request, response);
+        return response;
     }
 
     @Override
-    public void executeGet(String path, String outputPath) throws ClientNotConnectedException, IOException {
-        if (!socketChannel.isConnected()) {
+    public synchronized GetResponse executeGet(String path, String outputPath) throws ClientNotConnectedException, IOException {
+        if (!isConnected()) {
             throw new ClientNotConnectedException();
         }
         GetRequest request = new GetRequest(path);
         GetResponse response = GetResponse.clientGetResponse(outputPath);
         executeRequest(request, response);
         logger.info(path + " got and saved into " + outputPath);
+        return response;
     }
 
-    public String executeEcho(String message) throws ClientNotConnectedException, IOException {
-        if (!socketChannel.isConnected()) {
+    public synchronized EchoResponse executeEcho(String message) throws ClientNotConnectedException, IOException {
+        if (!isConnected()) {
             throw new ClientNotConnectedException();
         }
         EchoRequest request = new EchoRequest(message);
         EchoResponse response = new EchoResponse();
         executeRequest(request, response);
-        return response.debugString();
+        return response;
+    }
+    
+    private synchronized boolean isConnected() {
+        return socketChannel != null && socketChannel.isConnected();
+    }
+
+    private synchronized EchoResponse executeExit() {
+        try {
+            EchoRequest request = new EchoRequest(EchoRequest.EXIT_MESSAGE);
+            EchoResponse response = new EchoResponse();
+            executeRequest(request, response);
+            return response;
+        }
+        catch (IOException e) {
+            logger.info("Suppressing error on exiting client: " + e);
+            return null;
+        }
     }
 
     private void executeRequest(Request request, Response response) throws IOException {

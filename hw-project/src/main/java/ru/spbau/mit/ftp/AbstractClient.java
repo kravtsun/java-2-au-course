@@ -1,5 +1,9 @@
 package ru.spbau.mit.ftp;
 
+import ru.spbau.mit.ftp.protocol.EchoResponse;
+import ru.spbau.mit.ftp.protocol.GetResponse;
+import ru.spbau.mit.ftp.protocol.ListResponse;
+
 import java.io.IOException;
 
 public abstract class AbstractClient {
@@ -14,11 +18,11 @@ public abstract class AbstractClient {
         }
     }
 
-    public abstract void connect(String hostName, int port) throws IOException;
+    public abstract EchoResponse connect(String hostName, int port) throws IOException;
 
     public abstract void disconnect() throws IOException;
 
-    public abstract void executeList(String path) throws ClientNotConnectedException, IOException;
+    public abstract ListResponse executeList(String path) throws ClientNotConnectedException, IOException;
 
-    public abstract void executeGet(String path, String outputPath) throws ClientNotConnectedException, IOException;
+    public abstract GetResponse executeGet(String path, String outputPath) throws ClientNotConnectedException, IOException;
 }

@@ -1,12 +1,14 @@
 package ru.spbau.mit.ftp.protocol;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 
 public class EchoResponse extends Response {
+    public static final EchoResponse INIT_RESPONSE = new EchoResponse("hello");
+    public static final EchoResponse EXIT_RESPONSE = new EchoResponse("bye");
+//    public static final EchoResponse ERROR_RESPONSE = new EchoResponse("error");
+
     private String message;
 
     public EchoResponse() {}
@@ -31,5 +33,15 @@ public class EchoResponse extends Response {
     @Override
     public String debugString() {
         return message;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof EchoResponse && ((EchoResponse) o).message.equals(message);
+    }
+
+    @Override
+    public int hashCode() {
+        return message.hashCode();
     }
 }
