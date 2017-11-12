@@ -15,10 +15,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import ru.spbau.mit.ftp.protocol.*;
 
-public class Server implements Closeable {
+public class Server extends AbstractServer {
     private static final Logger logger = LogManager.getLogger("server");
     private final ExecutorService executorService;
-    private volatile boolean interrupt = false;
+    private final int port;
+    private volatile boolean isInterrupted = false;
+    private volatile boolean isFinished = false;
 
     public static void main(String[] args) {
         CommandLineParser parser = new DefaultParser();
@@ -40,37 +42,60 @@ public class Server implements Closeable {
         }
 
         logger.info(String.format("Starting server on localhost:%d, with %d threads", portNumber, nthreads));
-        try (Server server = new Server(portNumber, nthreads)) {
+        Server server = new Server(portNumber, nthreads);
+        try {
+            server.start();
             Scanner scanner = new Scanner(System.in);
-            while (true) {
+            while (!server.isFinished) {
                 String command = scanner.nextLine();
-                System.out.println("server command: " + command);
+                logger.info("server command: " + command);
                 if (command.equals("exit")) {
-                    server.interrupt = true;
                     break;
                 }
             }
         } catch (Exception e) {
             logger.error(e.getMessage());
+        } finally {
+            server.stop();
         }
     }
 
-    public Server(int portNumber, int nthreads) {
+    public Server(int port, int nthreads) {
         executorService = Executors.newFixedThreadPool(nthreads);
+        this.port = port;
+    }
+
+    @Override
+    public void start() {
         new Thread(() -> {
-            while (!interrupt) {
-                try (ServerSocket serverSocket = new ServerSocket(portNumber)) {
+            try (ServerSocket serverSocket = new ServerSocket(port)) {
+                while (!isInterrupted) {
                     executorService.submit(new FTPServerSession(serverSocket.accept()));
-                } catch (IOException e) {
-                    System.err.println("Could not listen on port " + portNumber);
-                    System.exit(-1);
                 }
+            } catch (IOException e) {
+                logger.error("Could not listen on port " + port);
+                isInterrupted = true;
+            }
+            synchronized (this) {
+                isFinished = true;
+                notifyAll();
             }
         }).start();
     }
 
     @Override
-    public void close() throws IOException {
+    public void stop() {
+        isInterrupted = true;
+        synchronized (this) {
+            // if still haven't exited the main server loop.
+            if (!isFinished) {
+                try {
+                    wait();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
     }
 
     private static class FTPServerSession implements Runnable {
@@ -116,7 +141,7 @@ public class Server implements Closeable {
                         logger.error(logMessage(e.getMessage()));
                         response = new SimpleResponse("Protocol exception: " + e.getMessage());
                     }
-                    byte []lineSeparator = new byte[0];
+                    byte[] lineSeparator = new byte[0];
                     String encodedMessage = Base64
                             .getMimeEncoder(-1, lineSeparator)
                             .encodeToString(response.str().getBytes());
