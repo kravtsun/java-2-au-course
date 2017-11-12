@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 
+import static ru.spbau.mit.ftp.protocol.NIOProcedures.readString;
+import static ru.spbau.mit.ftp.protocol.NIOProcedures.writeString;
+
 public class EchoRequest extends Request {
     public static final String EXIT_MESSAGE = "exit";
 

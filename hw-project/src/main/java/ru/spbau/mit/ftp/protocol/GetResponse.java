@@ -5,14 +5,17 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 
-public class GetResponse extends Response {
+import static ru.spbau.mit.ftp.protocol.NIOProcedures.readLong;
+import static ru.spbau.mit.ftp.protocol.NIOProcedures.writeLong;
+
+public final class GetResponse extends Response {
     private final String path;
 
     private GetResponse(String path) {
         this.path = path;
     }
 
-    public static GetResponse serverGetResponse(String sourcePath) throws FileNotFoundException {
+    public static GetResponse serverGetResponse(String sourcePath) {
         GetResponse response = new GetResponse(sourcePath);
         response.setInitialized();
         return response;

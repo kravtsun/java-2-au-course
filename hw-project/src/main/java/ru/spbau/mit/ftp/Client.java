@@ -11,13 +11,13 @@ import java.nio.channels.SocketChannel;
 import java.util.Scanner;
 
 public class Client extends AbstractClient implements Closeable {
-    private static final Logger logger = LogManager.getLogger("client");
+    private static final Logger LOGGER = LogManager.getLogger("client");
     private SocketChannel socketChannel;
 
-    public Client() throws IOException {
+    public Client() {
     }
 
-    public static void main(String []args) {
+    public static void main(String[] args) {
         CommandLineParser parser = new DefaultParser();
         Options options = new Options();
         options.addRequiredOption(null, "host", true, "Host address");
@@ -26,13 +26,13 @@ public class Client extends AbstractClient implements Closeable {
         String hostName;
 
         try {
-            logger.info("Parsing options: " + options);
+            LOGGER.info("Parsing options: " + options);
             CommandLine commandLine = parser.parse(options, args);
             String portString = commandLine.getOptionValue("port");
             portNumber = Integer.parseInt(portString);
             hostName = commandLine.getOptionValue("host", "localhost");
         } catch (Exception e) {
-            logger.error("Failed to parse: " + e);
+            LOGGER.error("Failed to parse: " + e);
             return;
         }
 
@@ -45,18 +45,18 @@ public class Client extends AbstractClient implements Closeable {
             try {
                 client.connect(hostName, portNumber);
             } catch (IOException e) {
-                logger.error("Failed to establish connection: " + e);
+                LOGGER.error("Failed to establish connection: " + e);
                 return;
             }
             String command;
             while ((command = scanner.nextLine()) != null) {
-                if (command.length() > getRequestPrefix.length() &&
-                        command.substring(0, getRequestPrefix.length()).equals(getRequestPrefix)) {
+                if (command.length() > getRequestPrefix.length()
+                        && command.substring(0, getRequestPrefix.length()).equals(getRequestPrefix)) {
                     String path = command.substring(getRequestPrefix.length());
                     File outputFile = File.createTempFile("get_", ".result");
                     client.executeGet(path, outputFile.getPath());
-                } else if (command.length() > listRequestPrefix.length() &&
-                        command.substring(0, listRequestPrefix.length()).equals(listRequestPrefix)) {
+                } else if (command.length() > listRequestPrefix.length()
+                        && command.substring(0, listRequestPrefix.length()).equals(listRequestPrefix)) {
                     String path = command.substring(listRequestPrefix.length());
                     client.executeList(path);
                 } else {
@@ -68,29 +68,27 @@ public class Client extends AbstractClient implements Closeable {
                     break;
                 }
             }
-        }
-        catch (Exception e) {
-            logger.error(e);
-        }
-        finally {
+        } catch (Exception e) {
+            LOGGER.error(e);
+        } finally {
             try {
                 if (client != null) {
                     client.disconnect();
                 }
             } catch (IOException e) {
-                logger.error("error while disconnecting: " + e);
+                LOGGER.error("error while disconnecting: " + e);
             }
         }
     }
 
     @Override
     public synchronized EchoResponse connect(String hostName, int port) throws IOException {
-        logger.info(String.format("Starting socket for %s:%d", hostName, port));
+        LOGGER.info(String.format("Starting socket for %s:%d", hostName, port));
         socketChannel = SocketChannel.open();
         socketChannel.connect(new InetSocketAddress(hostName, port));
         EchoResponse response = new EchoResponse();
         response.read(socketChannel);
-        logger.debug("received hello: " + response.debugString());
+        LOGGER.debug("received hello: " + response.debugString());
         return response;
     }
 
@@ -125,14 +123,15 @@ public class Client extends AbstractClient implements Closeable {
     }
 
     @Override
-    public synchronized GetResponse executeGet(String path, String outputPath) throws ClientNotConnectedException, IOException {
+    public synchronized GetResponse executeGet(String path, String outputPath)
+            throws ClientNotConnectedException, IOException {
         if (!isConnected()) {
             throw new ClientNotConnectedException();
         }
         GetRequest request = new GetRequest(path);
         GetResponse response = GetResponse.clientGetResponse(outputPath);
         executeRequest(request, response);
-        logger.info(path + " got and saved into " + outputPath);
+        LOGGER.info(path + " got and saved into " + outputPath);
         return response;
     }
 
@@ -145,7 +144,7 @@ public class Client extends AbstractClient implements Closeable {
         executeRequest(request, response);
         return response;
     }
-    
+
     public synchronized EchoResponse executeExit() {
         if (!isConnected()) {
             return null;
@@ -155,9 +154,8 @@ public class Client extends AbstractClient implements Closeable {
             EchoResponse response = new EchoResponse();
             executeRequest(request, response);
             return response;
-        }
-        catch (Exception e) {
-            logger.info("Suppressing error on exiting client: " + e);
+        } catch (Exception e) {
+            LOGGER.info("Suppressing error on exiting client: " + e);
             return null;
         }
     }
@@ -167,9 +165,9 @@ public class Client extends AbstractClient implements Closeable {
     }
 
     private void executeRequest(Request request, Response response) throws IOException {
-        logger.debug("sent: " + request.toString() + ": " + request.debugString());
+        LOGGER.debug("sent: " + request.toString() + ": " + request.debugString());
         request.write(socketChannel);
         response.read(socketChannel);
-        logger.debug("received: " + response.toString() + ": " + response.debugString());
+        LOGGER.debug("received: " + response.toString() + ": " + response.debugString());
     }
 }

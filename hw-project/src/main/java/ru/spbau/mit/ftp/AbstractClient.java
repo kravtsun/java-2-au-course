@@ -11,13 +11,16 @@ public abstract class AbstractClient {
 
     public abstract void disconnect() throws IOException;
 
-    public abstract ListResponse executeList(String path) throws ClientNotConnectedException, IOException;
+    public abstract ListResponse executeList(String path)
+            throws ClientNotConnectedException, IOException;
 
-    public abstract GetResponse executeGet(String path, String outputPath) throws ClientNotConnectedException, IOException;
+    public abstract GetResponse executeGet(String path, String outputPath)
+            throws ClientNotConnectedException, IOException;
 
-    public abstract EchoResponse executeExit() throws ClientNotConnectedException;
+    public abstract EchoResponse executeExit();
 
-    public abstract EchoResponse executeEcho(String message) throws ClientNotConnectedException, IOException;
+    public abstract EchoResponse executeEcho(String message)
+            throws ClientNotConnectedException, IOException;
 
     static class ClientNotConnectedException extends Exception {
         ClientNotConnectedException() {

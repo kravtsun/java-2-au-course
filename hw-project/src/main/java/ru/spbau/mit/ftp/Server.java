@@ -4,8 +4,6 @@ import org.apache.commons.cli.*;
 
 import java.io.*;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.StandardSocketOptions;
 import java.nio.channels.AsynchronousCloseException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
@@ -20,8 +18,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import ru.spbau.mit.ftp.protocol.*;
 
-public class Server extends AbstractServer implements Closeable {
-    private static final Logger logger = LogManager.getLogger("server");
+public class Server extends AbstractServer {
+    private static final Logger LOGGER = LogManager.getLogger("server");
     private final ExecutorService executorService;
     private final List<SocketChannel> sockets = new ArrayList<>();
     private ServerSocketChannel serverSocketChannel;
@@ -29,8 +27,7 @@ public class Server extends AbstractServer implements Closeable {
     public Server(int nthreads) throws ServerException {
         try {
             executorService = Executors.newFixedThreadPool(nthreads);
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             throw new ServerException(e);
         }
     }
@@ -45,7 +42,7 @@ public class Server extends AbstractServer implements Closeable {
         int portNumber;
         int nthreads;
         try {
-            logger.debug("Parsing options: " + options);
+            LOGGER.debug("Parsing options: " + options);
             CommandLine commandLine = parser.parse(options, args);
             hostName = commandLine.getOptionValue("host", "localhost");
             String portString = commandLine.getOptionValue("port");
@@ -53,22 +50,22 @@ public class Server extends AbstractServer implements Closeable {
             String nthreadsString = commandLine.getOptionValue("threads", "5");
             nthreads = Integer.parseInt(nthreadsString);
         } catch (Throwable t) {
-            logger.error("Failed to parse arguments: " + t);
+            LOGGER.error("Failed to parse arguments: " + t);
             return;
         }
 
-        try (Server server = new Server(nthreads)) {
+        try (AbstractServer server = new Server(nthreads)) {
             server.start(hostName, portNumber);
             Scanner scanner = new Scanner(System.in);
             while (true) {
                 String command = scanner.nextLine();
-                logger.debug("server command: " + command);
+                LOGGER.debug("server command: " + command);
                 if (command.equals(EchoRequest.EXIT_MESSAGE)) {
                     break;
                 }
             }
         } catch (Exception e) {
-            logger.error(e);
+            LOGGER.error(e);
         }
     }
 
@@ -80,7 +77,7 @@ public class Server extends AbstractServer implements Closeable {
 
         serverSocketChannel = ServerSocketChannel.open();
         serverSocketChannel.bind(new InetSocketAddress(hostName, port));
-        logger.info("Starting socket for " + serverSocketChannel.getLocalAddress());
+        LOGGER.info("Starting socket for " + serverSocketChannel.getLocalAddress());
         final boolean[] isStarted = {false};
         new Thread(() -> {
             try {
@@ -96,9 +93,9 @@ public class Server extends AbstractServer implements Closeable {
                     }
                 }
             } catch (AsynchronousCloseException ignored) {
-                logger.info("closing serverSocketChannel by stop() request");
+                LOGGER.info("closing serverSocketChannel by stop() request");
             } catch (Exception e) {
-                logger.error(e);
+                LOGGER.error(e);
                 try {
                     stop();
                 } catch (IOException e1) {
@@ -128,27 +125,26 @@ public class Server extends AbstractServer implements Closeable {
     }
 
     private static class FTPServerSession implements Runnable {
-        private static final Logger logger = LogManager.getLogger("session");
-        private static final AtomicInteger sessionsCount = new AtomicInteger(0);
+        private static final Logger LOGGER = LogManager.getLogger("session");
+        private static final AtomicInteger SESSIONS_COUNT = new AtomicInteger(0);
         private final SocketChannel socketChannel;
         private final int sessionId;
 
-        FTPServerSession(SocketChannel socketChannel) throws IOException {
+        FTPServerSession(SocketChannel socketChannel) {
             this.socketChannel = socketChannel;
-            this.sessionId = sessionsCount.incrementAndGet();
+            this.sessionId = SESSIONS_COUNT.incrementAndGet();
         }
 
         @Override
         public void run() {
             try {
                 EchoResponse.INIT_RESPONSE.write(socketChannel);
-//                SentEntity.writeString(socketChannel, "Hello from server, session #" + sessionId);
-                logger.info(logMessage("starting IO loop"));
+                LOGGER.info(logMessage("starting IO loop"));
                 while (true) {
                     SentEntity response;
                     boolean receivedExitMessage = false;
                     Request request = Request.parse(socketChannel);
-                    logger.info("received: " + request + ": " + request.debugString());
+                    LOGGER.info("received: " + request + ": " + request.debugString());
                     if (request instanceof EchoRequest) {
                         String receivedMessage = ((EchoRequest) request).getMessage();
                         if (receivedMessage.equals(EchoRequest.EXIT_MESSAGE)) {
@@ -172,26 +168,26 @@ public class Server extends AbstractServer implements Closeable {
                         throw new ServerException("Unknown request: " + request);
                     }
                     response.write(socketChannel);
-                    logger.debug(logMessage("sent: " + response + ": " + response.debugString()));
+                    LOGGER.debug(logMessage("sent: " + response + ": " + response.debugString()));
                     if (receivedExitMessage) {
                         break;
                     }
                 }
-                logger.info(logMessage("closing socket"));
+                LOGGER.info(logMessage("closing socket"));
             } catch (Exception e) {
-                logger.error(logMessage(e.toString()));
+                LOGGER.error(logMessage(e.toString()));
                 try {
                     EchoResponse.EXIT_RESPONSE.write(socketChannel);
                 } catch (IOException e1) {
-                    logger.error(logMessage(e1.toString()));
+                    LOGGER.error(logMessage(e1.toString()));
                 }
             }
             try {
                 socketChannel.close();
             } catch (IOException e) {
-                logger.error("Error while trying to close socketChannel: " + e);
+                LOGGER.error("Error while trying to close socketChannel: " + e);
             }
-            logger.info(logMessage("exiting..."));
+            LOGGER.info(logMessage("exiting..."));
         }
 
         private String logMessage(String message) {

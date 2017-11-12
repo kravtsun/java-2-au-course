@@ -1,8 +1,9 @@
 package ru.spbau.mit.ftp;
 
+import java.io.Closeable;
 import java.io.IOException;
 
-public abstract class AbstractServer {
+public abstract class AbstractServer implements Closeable {
     public abstract void start(String hostName, int port) throws IOException, ServerException;
 
     public abstract void stop() throws IOException;

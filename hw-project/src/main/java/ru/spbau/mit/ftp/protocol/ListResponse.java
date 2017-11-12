@@ -1,16 +1,14 @@
 package ru.spbau.mit.ftp.protocol;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static ru.spbau.mit.ftp.protocol.NIOProcedures.*;
 
 public class ListResponse extends Response {
     private String[] fileNames;

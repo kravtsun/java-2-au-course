@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 
+import static ru.spbau.mit.ftp.protocol.NIOProcedures.readInt;
+import static ru.spbau.mit.ftp.protocol.NIOProcedures.writeInt;
+
 public abstract class Request extends SentEntity {
     public static Request parse(ReadableByteChannel in) throws IOException {
         int code = readInt(in);
