@@ -4,12 +4,8 @@ import org.apache.commons.cli.*;
 
 import java.io.*;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.nio.channels.WritableByteChannel;
 import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -19,7 +15,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import ru.spbau.mit.ftp.protocol.*;
 
-public class Server extends AbstractServer {
+public class Server extends AbstractServer implements Closeable {
     private static final Logger logger = LogManager.getLogger("server");
     private final ExecutorService executorService;
     private final ServerSocketChannel serverSocketChannel;
@@ -34,7 +30,7 @@ public class Server extends AbstractServer {
         int portNumber;
         int nthreads;
         try {
-            logger.info("Parsing options: " + options);
+            logger.debug("Parsing options: " + options);
             CommandLine commandLine = parser.parse(options, args);
             String portString = commandLine.getOptionValue("port");
             portNumber = Integer.parseInt(portString);
@@ -46,26 +42,18 @@ public class Server extends AbstractServer {
         }
 
         logger.info(String.format("Starting server on localhost:%d, with %d threads", portNumber, nthreads));
-        Server server = null;
-        try {
-            server = new Server(portNumber, nthreads);
-        } catch (IOException e) {
-            logger.error("Failed to start server: " + e.getMessage());
-        }
-        try {
+        try (Server server = new Server(portNumber, nthreads)) {
             server.start();
             Scanner scanner = new Scanner(System.in);
             while (!server.isFinished) {
                 String command = scanner.nextLine();
-                logger.info("server command: " + command);
+                logger.debug("server command: " + command);
                 if (command.equals(SimpleRequest.EXIT_MESSAGE)) {
                     break;
                 }
             }
         } catch (Exception e) {
-            logger.error(e.getMessage());
-        } finally {
-            server.stop();
+            logger.error(e);
         }
     }
 
@@ -84,7 +72,7 @@ public class Server extends AbstractServer {
                     executorService.submit(new FTPServerSession(serverSocketChannel));
                 }
             } catch (Exception e) {
-                logger.error(e.getMessage());
+                logger.error(e);
                 isInterrupted = true;
             }
             synchronized (this) {
@@ -109,10 +97,14 @@ public class Server extends AbstractServer {
         }
     }
 
-    private static class FTPServerSession implements Runnable {
+    @Override
+    public void close() throws IOException {
+        serverSocketChannel.close();
+    }
+
+    private static class FTPServerSession implements Runnable, Closeable {
         private static final Logger logger = LogManager.getLogger("session");
         private static final AtomicInteger sessionsCount = new AtomicInteger(0);
-        //        private final ServerSocketChannel socket;
         private final SocketChannel socketChannel;
         private final int sessionId;
 
@@ -145,25 +137,31 @@ public class Server extends AbstractServer {
                         if (!file.exists() || file.isDirectory()) {
                             throw new ServerException("file " + path + " is not regular");
                         }
-                        response = new GetResponse(new File(path));
+                        response = GetResponse.serverGetResponse(path);
                     } else {
                         throw new ServerException("Unknown request: " + request);
                     }
                     response.write(socketChannel);
-                    logger.info(logMessage("sent: " + response + ": " + response.debugString()));
+                    logger.debug(logMessage("sent: " + response + ": " + response.debugString()));
                     if (receivedExitMessage) {
                         break;
                     }
                 }
                 logger.info(logMessage("closing socket"));
             } catch (Exception e) {
-                logger.error(logMessage(e.getMessage()));
+                logger.error(logMessage(e.toString()));
             }
             logger.info(logMessage("exiting..."));
+        }
+
+        @Override
+        public void close() throws IOException {
+            socketChannel.close();
         }
 
         private String logMessage(String message) {
             return String.format("#%d: %s", sessionId, message);
         }
+
     }
 }

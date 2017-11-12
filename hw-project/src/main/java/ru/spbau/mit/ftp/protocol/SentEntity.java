@@ -1,11 +1,7 @@
 package ru.spbau.mit.ftp.protocol;
 
-import java.io.DataInput;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.IntBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 
@@ -46,7 +42,6 @@ public abstract class SentEntity {
         writeInt(out, messageBytes.length);
         ByteBuffer buffer = ByteBuffer.allocate(messageBytes.length);
         buffer.put(messageBytes);
-        buffer.flip();
         writeUntil(buffer, out);
     }
 
@@ -54,50 +49,51 @@ public abstract class SentEntity {
         int stringLength = readInt(in);
         ByteBuffer buffer = ByteBuffer.allocate(stringLength);
         readUntil(buffer, in);
-        buffer.flip();
         return new String(buffer.array());
     }
 
     public static void writeInt(WritableByteChannel out, int value) throws IOException {
         ByteBuffer buffer = ByteBuffer.allocate(4);
         buffer.putInt(value);
-        buffer.flip();
         writeUntil(buffer, out);
     }
 
     public static int readInt(ReadableByteChannel in) throws IOException {
         ByteBuffer buffer = ByteBuffer.allocate(4);
         readUntil(buffer, in);
-        buffer.flip();
         return buffer.getInt();
     }
 
     public static void writeLong(WritableByteChannel out, long value) throws IOException {
         ByteBuffer buffer = ByteBuffer.allocate(8);
         buffer.putLong(value);
-        buffer.flip();
         writeUntil(buffer, out);
     }
 
     public static long readLong(ReadableByteChannel in) throws IOException {
         ByteBuffer buffer = ByteBuffer.allocate(8);
         readUntil(buffer, in);
-        buffer.flip();
         return buffer.getLong();
     }
 
     private static void writeUntil(ByteBuffer buffer, WritableByteChannel out) throws IOException {
-//        assert buffer.position() == 0
-        while (buffer.position() != buffer.limit()) {
+        if (buffer.position() != buffer.capacity()) {
+            throw new SentEntityException("Buffer is not full.");
+        }
+        buffer.flip();
+        while (buffer.hasRemaining()) {
             out.write(buffer);
         }
     }
 
     private static void readUntil(ByteBuffer buffer, ReadableByteChannel in) throws IOException {
-//        assert buffer.position() == 0
+        if (buffer.position() == buffer.limit()) {
+            throw new SentEntityException("Buffer is full.");
+        }
         while (buffer.position() != buffer.capacity()) {
             in.read(buffer);
         }
+        buffer.flip();
     }
 }
 

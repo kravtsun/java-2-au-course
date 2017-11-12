@@ -8,15 +8,11 @@ import ru.spbau.mit.ftp.protocol.*;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.nio.channels.FileChannel;
-import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SocketChannel;
-import java.nio.channels.WritableByteChannel;
 import java.util.Scanner;
 
-public class Client extends AbstractClient {
+public class Client extends AbstractClient implements Closeable {
     private static final Logger logger = LogManager.getLogger("client");
-//    private Socket socket;
     private SocketChannel socketChannel;
 
     public static void main(String []args) {
@@ -34,29 +30,20 @@ public class Client extends AbstractClient {
             portNumber = Integer.parseInt(portString);
             hostName = commandLine.getOptionValue("host", "localhost");
         } catch (Exception e) {
-            logger.error("Failed to parse: " + e.getMessage());
-            return;
-        }
-
-        Client client;
-        try {
-            client = new Client();
-        } catch (IOException e) {
-            logger.error("Failed to setup client: " + e.getMessage());
-            return;
-        }
-
-        try {
-            client.connect(hostName, portNumber);
-        } catch (IOException e) {
-            logger.error("Failed to establish connection: " + e.getMessage());
+            logger.error("Failed to parse: " + e);
             return;
         }
 
         final String getRequestPrefix = "get ";
         final String listRequestPrefix = "list ";
         final Scanner scanner = new Scanner(System.in);
-        try {
+        try (Client client = new Client()) {
+            try {
+                client.connect(hostName, portNumber);
+            } catch (IOException e) {
+                logger.error("Failed to establish connection: " + e);
+                return;
+            }
             String command;
             while ((command = scanner.nextLine()) != null) {
                 if (command.length() > getRequestPrefix.length() &&
@@ -78,37 +65,34 @@ public class Client extends AbstractClient {
             }
         }
         catch (Exception e) {
-            logger.error(e.getMessage());
-        }
-
-        try {
-            client.disconnect();
-        } catch (Exception e) {
-            logger.error("Error while disconnecting client: " + e.getMessage());
+            logger.error(e);
         }
     }
 
     public Client() throws IOException {
-        socketChannel = SocketChannel.open();
     }
 
     @Override
     public void connect(String hostName, int port) throws IOException {
         logger.info(String.format("Starting socket for %s:%d", hostName, port));
-
+        socketChannel = SocketChannel.open();
         socketChannel.connect(new InetSocketAddress(hostName, port));
         // receiving hello from server.
         String msg = SentEntity.readString(socketChannel);
-        logger.info("received: " + msg);
+        logger.debug("received hello: " + msg);
     }
 
     @Override
-    public void disconnect() throws ClientNotConnectedException, IOException {
-        if (socketChannel.isConnected()) {
+    public void disconnect() throws IOException {
+        if (socketChannel != null) {
             socketChannel.close();
-        } else {
-            throw new ClientNotConnectedException();
         }
+        socketChannel = null;
+    }
+
+    @Override
+    public void close() throws IOException {
+        disconnect();
     }
 
     @Override
@@ -127,11 +111,8 @@ public class Client extends AbstractClient {
             throw new ClientNotConnectedException();
         }
         GetRequest request = new GetRequest(path);
-        request.write(socketChannel);
-        FileChannel outputChannel = new FileOutputStream(outputPath).getChannel();
-        long size = SentEntity.readLong(socketChannel);
-        outputChannel.transferFrom(socketChannel, 0, size);
-        outputChannel.close();
+        GetResponse response = GetResponse.clientGetResponse(outputPath);
+        executeRequest(request, response);
         logger.info(path + " got and saved into " + outputPath);
     }
 
@@ -145,9 +126,9 @@ public class Client extends AbstractClient {
     }
 
     private void executeRequest(Request request, Response response) throws IOException {
-        logger.info("sent: " + request.toString() + ": " + request.debugString());
+        logger.debug("sent: " + request.toString() + ": " + request.debugString());
         request.write(socketChannel);
         response.read(socketChannel);
-        logger.info("received: " + response.toString() + ": " + response.debugString());
+        logger.debug("received: " + response.toString() + ": " + response.debugString());
     }
 }

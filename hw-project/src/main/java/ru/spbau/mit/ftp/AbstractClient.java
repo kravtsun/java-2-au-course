@@ -16,7 +16,7 @@ public abstract class AbstractClient {
 
     public abstract void connect(String hostName, int port) throws IOException;
 
-    public abstract void disconnect() throws ClientNotConnectedException, IOException;
+    public abstract void disconnect() throws IOException;
 
     public abstract void executeList(String path) throws ClientNotConnectedException, IOException;
 
