@@ -9,6 +9,7 @@ import ru.spbau.mit.ftp.protocol.SimpleRequest;
 
 import java.io.*;
 import java.net.Socket;
+import java.util.Base64;
 import java.util.Scanner;
 
 public class Client {
@@ -63,7 +64,10 @@ public class Client {
                 out.println(request.str());
 
                 msg = in.readLine();
-                logger.info("received: " + msg);
+
+                byte[] bytes = Base64.getMimeDecoder().decode(msg);
+                String bytesString = new String(bytes);
+                logger.info("received: " + bytesString);
 
                 if (command.equals("exit")) {
                     break;

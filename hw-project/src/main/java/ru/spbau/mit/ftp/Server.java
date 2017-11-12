@@ -5,6 +5,7 @@ import org.apache.commons.cli.*;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Base64;
 import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -115,7 +116,11 @@ public class Server implements Closeable {
                         logger.error(logMessage(e.getMessage()));
                         response = new SimpleResponse("Protocol exception: " + e.getMessage());
                     }
-                    out.println(response.str());
+                    byte []lineSeparator = new byte[0];
+                    String encodedMessage = Base64
+                            .getMimeEncoder(-1, lineSeparator)
+                            .encodeToString(response.str().getBytes());
+                    out.println(encodedMessage);
                     logger.info(logMessage("sent: " + response.str()));
                 }
                 logger.info(logMessage("closing socket"));
