@@ -35,7 +35,11 @@ public class GetResponse extends Response {
     public void read(ReadableByteChannel in) throws IOException {
         try (FileChannel outputChannel = new FileOutputStream(new File(path)).getChannel()) {
             long size = readLong(in);
-            outputChannel.transferFrom(in, 0, size);
+            long written = outputChannel.transferFrom(in, 0, size);
+            if (written != size) {
+                throw new SentEntityException("expected to write into file in one call..");
+            }
+            outputChannel.force(true);
         }
     }
 

@@ -4,6 +4,7 @@ import org.apache.commons.cli.*;
 
 import java.io.*;
 import java.net.InetSocketAddress;
+import java.nio.channels.AsynchronousCloseException;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.Scanner;
@@ -18,20 +19,21 @@ import ru.spbau.mit.ftp.protocol.*;
 public class Server extends AbstractServer implements Closeable {
     private static final Logger logger = LogManager.getLogger("server");
     private final ExecutorService executorService;
-    private final ServerSocketChannel serverSocketChannel;
-    private volatile boolean isInterrupted = false;
-    private volatile boolean isFinished = false;
+    private ServerSocketChannel serverSocketChannel;
 
     public static void main(String[] args) {
         CommandLineParser parser = new DefaultParser();
         Options options = new Options();
         options.addRequiredOption(null, "port", true, "Port to start listening at");
         options.addOption("j", "threads", true, "number of worker threads to run");
+        options.addOption("h", "host", true, "hostName to bind to (should be available)");
+        String hostName;
         int portNumber;
         int nthreads;
         try {
             logger.debug("Parsing options: " + options);
             CommandLine commandLine = parser.parse(options, args);
+            hostName = commandLine.getOptionValue("host", "localhost");
             String portString = commandLine.getOptionValue("port");
             portNumber = Integer.parseInt(portString);
             String nthreadsString = commandLine.getOptionValue("threads", "5");
@@ -41,14 +43,13 @@ public class Server extends AbstractServer implements Closeable {
             return;
         }
 
-        logger.info(String.format("Starting server on localhost:%d, with %d threads", portNumber, nthreads));
-        try (Server server = new Server(portNumber, nthreads)) {
-            server.start();
+        try (Server server = new Server(nthreads)) {
+            server.start(hostName, portNumber);
             Scanner scanner = new Scanner(System.in);
-            while (!server.isFinished) {
+            while (true) {
                 String command = scanner.nextLine();
                 logger.debug("server command: " + command);
-                if (command.equals(SimpleRequest.EXIT_MESSAGE)) {
+                if (command.equals(EchoRequest.EXIT_MESSAGE)) {
                     break;
                 }
             }
@@ -57,59 +58,76 @@ public class Server extends AbstractServer implements Closeable {
         }
     }
 
-    public Server(int port, int nthreads) throws IOException {
-        executorService = Executors.newFixedThreadPool(nthreads);
-        serverSocketChannel = ServerSocketChannel.open();
-        serverSocketChannel.bind(new InetSocketAddress("localhost", port));
-        logger.info("Starting socket for " + serverSocketChannel.getLocalAddress());
+    public Server(int nthreads) throws ServerException {
+        try {
+            executorService = Executors.newFixedThreadPool(nthreads);
+        }
+        catch (Exception e) {
+            throw new ServerException(e);
+        }
     }
 
     @Override
-    public void start() {
+    public synchronized void start(String hostName, int port) throws IOException, ServerException {
+        if (serverSocketChannel != null && serverSocketChannel.isOpen()) {
+            throw new ServerException("server already running");
+        }
+
+        serverSocketChannel = ServerSocketChannel.open();
+        serverSocketChannel.bind(new InetSocketAddress(hostName, port));
+        logger.info("Starting socket for " + serverSocketChannel.getLocalAddress());
+        final boolean[] isStarted = {false};
         new Thread(() -> {
             try {
-                while (!isInterrupted) {
-                    executorService.submit(new FTPServerSession(serverSocketChannel));
+                isStarted[0] = true;
+                while (true) {
+                    if (!serverSocketChannel.isOpen()) {
+                        break;
+                    }
+                    SocketChannel socketChannel = serverSocketChannel.accept();
+                    if (socketChannel != null) {
+                        executorService.submit(new FTPServerSession(socketChannel));
+                    }
                 }
+            } catch (AsynchronousCloseException ignored) {
+                logger.info("closing serverSocketChannel by stop() request");
             } catch (Exception e) {
                 logger.error(e);
-                isInterrupted = true;
-            }
-            synchronized (this) {
-                isFinished = true;
-                notifyAll();
+                try {
+                    stop();
+                } catch (IOException e1) {
+                    throw new RuntimeException(e1);
+                }
             }
         }).start();
+        while (!isStarted[0]) {
+            Thread.yield();
+        }
     }
 
     @Override
-    public void stop() {
-        isInterrupted = true;
-        synchronized (this) {
-            // if still haven't exited the main server loop.
-            if (!isFinished) {
-                try {
-                    wait();
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
+    public synchronized void stop() throws IOException {
+        if (serverSocketChannel != null) {
+            serverSocketChannel.close();
+            while (serverSocketChannel.isOpen()) {
+                Thread.yield();
             }
         }
     }
 
     @Override
     public void close() throws IOException {
-        serverSocketChannel.close();
+        stop();
     }
 
-    private static class FTPServerSession implements Runnable, Closeable {
+    private static class FTPServerSession implements Runnable {
         private static final Logger logger = LogManager.getLogger("session");
         private static final AtomicInteger sessionsCount = new AtomicInteger(0);
         private final SocketChannel socketChannel;
         private final int sessionId;
 
-        FTPServerSession(ServerSocketChannel serverSocketChannel) throws IOException {
-            socketChannel = serverSocketChannel.accept();
+        FTPServerSession(SocketChannel socketChannel) throws IOException {
+            this.socketChannel = socketChannel;
             this.sessionId = sessionsCount.incrementAndGet();
         }
 
@@ -123,10 +141,10 @@ public class Server extends AbstractServer implements Closeable {
                     boolean receivedExitMessage = false;
                     Request request = Request.parse(socketChannel);
                     logger.info("received: " + request + ": " + request.debugString());
-                    if (request instanceof SimpleRequest) {
-                        String receivedMessage = ((SimpleRequest) request).getMessage();
-                        receivedExitMessage = receivedMessage.equals(SimpleRequest.EXIT_MESSAGE);
-                        response = new SimpleResponse("received request with message: " + receivedMessage);
+                    if (request instanceof EchoRequest) {
+                        String receivedMessage = ((EchoRequest) request).getMessage();
+                        receivedExitMessage = receivedMessage.equals(EchoRequest.EXIT_MESSAGE);
+                        response = new EchoResponse(receivedMessage);
                     } else if (request instanceof ListRequest) {
                         String path = ((ListRequest) request).getPath();
                         File[] files = new File(path).listFiles();
@@ -151,17 +169,16 @@ public class Server extends AbstractServer implements Closeable {
             } catch (Exception e) {
                 logger.error(logMessage(e.toString()));
             }
+            try {
+                socketChannel.close();
+            } catch (IOException e) {
+                logger.error("Error while trying to close socketChannel: " + e);
+            }
             logger.info(logMessage("exiting..."));
-        }
-
-        @Override
-        public void close() throws IOException {
-            socketChannel.close();
         }
 
         private String logMessage(String message) {
             return String.format("#%d: %s", sessionId, message);
         }
-
     }
 }

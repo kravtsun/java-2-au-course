@@ -6,12 +6,12 @@ import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 
-public class SimpleResponse extends Response {
+public class EchoResponse extends Response {
     private String message;
 
-    public SimpleResponse() {}
+    public EchoResponse() {}
 
-    public SimpleResponse(String message) {
+    public EchoResponse(String message) {
         this.message = message;
         setInitialized();
     }

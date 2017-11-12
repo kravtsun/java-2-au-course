@@ -1,27 +1,24 @@
 package ru.spbau.mit.ftp.protocol;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 
-public class SimpleRequest extends Request {
+public class EchoRequest extends Request {
     public static final String EXIT_MESSAGE = "exit";
 
     private String message;
 
-    public SimpleRequest() {}
+    public EchoRequest() {}
 
-    public SimpleRequest(String message) {
+    public EchoRequest(String message) {
         this.message = message;
         setInitialized();
     }
 
     @Override
     public RequestCode code() {
-        return RequestCode.SIMPLE;
+        return RequestCode.ECHO;
     }
 
     @Override

@@ -1,7 +1,5 @@
 package ru.spbau.mit.ftp.protocol;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
@@ -10,8 +8,8 @@ public abstract class Request extends SentEntity {
     public static Request parse(ReadableByteChannel in) throws IOException {
         int code = readInt(in);
         Request request;
-        if (code == RequestCode.SIMPLE.intValue) {
-            request = new SimpleRequest();
+        if (code == RequestCode.ECHO.intValue) {
+            request = new EchoRequest();
         } else if (code == RequestCode.LIST.intValue) {
             request = new ListRequest();
         } else if (code == RequestCode.GET.intValue) {
@@ -30,7 +28,7 @@ public abstract class Request extends SentEntity {
     }
 
     protected enum RequestCode {
-        SIMPLE(0),
+        ECHO(0),
         LIST(1),
         GET(2);
 

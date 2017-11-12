@@ -7,7 +7,6 @@ import ru.spbau.mit.ftp.protocol.*;
 
 import java.io.*;
 import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.nio.channels.SocketChannel;
 import java.util.Scanner;
 
@@ -56,10 +55,10 @@ public class Client extends AbstractClient implements Closeable {
                     String path = command.substring(listRequestPrefix.length());
                     client.executeList(path);
                 } else {
-                    client.executeSimple(command);
+                    client.executeEcho(command);
                 }
 
-                if (command.equals(SimpleRequest.EXIT_MESSAGE)) {
+                if (command.equals(EchoRequest.EXIT_MESSAGE)) {
                     break;
                 }
             }
@@ -116,13 +115,14 @@ public class Client extends AbstractClient implements Closeable {
         logger.info(path + " got and saved into " + outputPath);
     }
 
-    public void executeSimple(String message) throws ClientNotConnectedException, IOException {
+    public String executeEcho(String message) throws ClientNotConnectedException, IOException {
         if (!socketChannel.isConnected()) {
             throw new ClientNotConnectedException();
         }
-        SimpleRequest request = new SimpleRequest(message);
-        SimpleResponse response = new SimpleResponse();
+        EchoRequest request = new EchoRequest(message);
+        EchoResponse response = new EchoResponse();
         executeRequest(request, response);
+        return response.debugString();
     }
 
     private void executeRequest(Request request, Response response) throws IOException {
