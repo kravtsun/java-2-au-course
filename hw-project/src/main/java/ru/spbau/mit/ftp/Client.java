@@ -8,6 +8,7 @@ import ru.spbau.mit.ftp.protocol.*;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
@@ -52,14 +53,21 @@ public class Client extends AbstractClient {
             return;
         }
 
+        final String getRequestPrefix = "get ";
         final String listRequestPrefix = "list ";
         final Scanner scanner = new Scanner(System.in);
         try {
             String command;
             while ((command = scanner.nextLine()) != null) {
-                if (command.length() > listRequestPrefix.length() &&
+                if (command.length() > getRequestPrefix.length() &&
+                        command.substring(0, getRequestPrefix.length()).equals(getRequestPrefix)) {
+                    String path = command.substring(getRequestPrefix.length());
+                    File outputFile = File.createTempFile("get_", ".result");
+                    client.executeGet(path, outputFile.getPath());
+                } else if (command.length() > listRequestPrefix.length() &&
                         command.substring(0, listRequestPrefix.length()).equals(listRequestPrefix)) {
-                    client.executeList(command.substring(listRequestPrefix.length()));
+                    String path = command.substring(listRequestPrefix.length());
+                    client.executeList(path);
                 } else {
                     client.executeSimple(command);
                 }
@@ -71,6 +79,12 @@ public class Client extends AbstractClient {
         }
         catch (Exception e) {
             logger.error(e.getMessage());
+        }
+
+        try {
+            client.disconnect();
+        } catch (Exception e) {
+            logger.error("Error while disconnecting client: " + e.getMessage());
         }
     }
 
@@ -108,10 +122,17 @@ public class Client extends AbstractClient {
     }
 
     @Override
-    public void executeGet(String path) throws ClientNotConnectedException, IOException {
+    public void executeGet(String path, String outputPath) throws ClientNotConnectedException, IOException {
         if (!socketChannel.isConnected()) {
             throw new ClientNotConnectedException();
         }
+        GetRequest request = new GetRequest(path);
+        request.write(socketChannel);
+        FileChannel outputChannel = new FileOutputStream(outputPath).getChannel();
+        long size = SentEntity.readLong(socketChannel);
+        outputChannel.transferFrom(socketChannel, 0, size);
+        outputChannel.close();
+        logger.info(path + " got and saved into " + outputPath);
     }
 
     public void executeSimple(String message) throws ClientNotConnectedException, IOException {

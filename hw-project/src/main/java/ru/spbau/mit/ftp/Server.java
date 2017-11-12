@@ -112,7 +112,7 @@ public class Server extends AbstractServer {
     private static class FTPServerSession implements Runnable {
         private static final Logger logger = LogManager.getLogger("session");
         private static final AtomicInteger sessionsCount = new AtomicInteger(0);
-//        private final ServerSocketChannel socket;
+        //        private final ServerSocketChannel socket;
         private final SocketChannel socketChannel;
         private final int sessionId;
 
@@ -129,23 +129,25 @@ public class Server extends AbstractServer {
                 while (true) {
                     SentEntity response;
                     boolean receivedExitMessage = false;
-                    try {
-                        Request request = Request.parse(socketChannel);
-                        logger.info("received: " + request + ": " + request.debugString());
-                        if (request instanceof PathRequest) {
-                            String path = ((PathRequest) request).getPath();
-                            File[] files = new File(path).listFiles();
-                            response = new ListResponse(files);
-                        } else if (request instanceof SimpleRequest) {
-                            String receivedMessage = ((SimpleRequest) request).getMessage();
-                            receivedExitMessage = receivedMessage.equals(SimpleRequest.EXIT_MESSAGE);
-                            response = new SimpleResponse("received request with message: " + receivedMessage);
-                        } else {
-                            response = new SimpleResponse("Unknown request: " + request);
+                    Request request = Request.parse(socketChannel);
+                    logger.info("received: " + request + ": " + request.debugString());
+                    if (request instanceof SimpleRequest) {
+                        String receivedMessage = ((SimpleRequest) request).getMessage();
+                        receivedExitMessage = receivedMessage.equals(SimpleRequest.EXIT_MESSAGE);
+                        response = new SimpleResponse("received request with message: " + receivedMessage);
+                    } else if (request instanceof ListRequest) {
+                        String path = ((ListRequest) request).getPath();
+                        File[] files = new File(path).listFiles();
+                        response = new ListResponse(files);
+                    } else if (request instanceof GetRequest) {
+                        String path = ((GetRequest) request).getPath();
+                        File file = new File(path);
+                        if (!file.exists() || file.isDirectory()) {
+                            throw new ServerException("file " + path + " is not regular");
                         }
-                    } catch (Exception e) {
-                        logger.error(logMessage(e.getMessage()));
-                        response = new SimpleResponse("Dealing request exception: " + e.getMessage());
+                        response = new GetResponse(new File(path));
+                    } else {
+                        throw new ServerException("Unknown request: " + request);
                     }
                     response.write(socketChannel);
                     logger.info(logMessage("sent: " + response + ": " + response.debugString()));

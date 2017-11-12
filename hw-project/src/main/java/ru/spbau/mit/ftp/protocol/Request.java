@@ -14,6 +14,8 @@ public abstract class Request extends SentEntity {
             request = new SimpleRequest();
         } else if (code == RequestCode.LIST.intValue) {
             request = new ListRequest();
+        } else if (code == RequestCode.GET.intValue) {
+            request = new GetRequest();
         } else {
             throw new RequestException("Unknown code: " + code);
         }

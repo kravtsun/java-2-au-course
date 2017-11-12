@@ -72,6 +72,20 @@ public abstract class SentEntity {
         return buffer.getInt();
     }
 
+    public static void writeLong(WritableByteChannel out, long value) throws IOException {
+        ByteBuffer buffer = ByteBuffer.allocate(8);
+        buffer.putLong(value);
+        buffer.flip();
+        writeUntil(buffer, out);
+    }
+
+    public static long readLong(ReadableByteChannel in) throws IOException {
+        ByteBuffer buffer = ByteBuffer.allocate(8);
+        readUntil(buffer, in);
+        buffer.flip();
+        return buffer.getLong();
+    }
+
     private static void writeUntil(ByteBuffer buffer, WritableByteChannel out) throws IOException {
 //        assert buffer.position() == 0
         while (buffer.position() != buffer.limit()) {

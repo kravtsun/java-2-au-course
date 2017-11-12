@@ -20,5 +20,5 @@ public abstract class AbstractClient {
 
     public abstract void executeList(String path) throws ClientNotConnectedException, IOException;
 
-    public abstract void executeGet(String path) throws ClientNotConnectedException, IOException;
+    public abstract void executeGet(String path, String outputPath) throws ClientNotConnectedException, IOException;
 }

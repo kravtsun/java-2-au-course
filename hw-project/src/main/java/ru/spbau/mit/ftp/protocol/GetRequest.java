@@ -5,6 +5,8 @@ public class GetRequest extends PathRequest {
         super(path);
     }
 
+    public GetRequest() {}
+
     @Override
     protected RequestCode code() {
         return RequestCode.GET;
