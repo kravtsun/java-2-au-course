@@ -6,35 +6,7 @@ import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 
 public abstract class SentEntity {
-    public static class SentEntityException extends RuntimeException {
-        SentEntityException(String message) {
-            super(message);
-        }
-    }
-
     private boolean initialized = false;
-
-    public abstract void write(WritableByteChannel out) throws IOException;
-
-    public abstract void read(ReadableByteChannel in) throws IOException;
-
-    public abstract String debugString();
-
-    protected void setInitialized() {
-        initialized = true;
-    }
-
-    protected void checkForEmptyness() {
-        if (initialized) {
-            throw new SentEntityException(this.getClass().getName() + " should be empty");
-        }
-    }
-
-    protected void checkForNonEmptyness() {
-        if (!initialized) {
-            throw new SentEntityException(this.getClass().getName() + " should not be empty");
-        }
-    }
 
     // TODO Put this auxiliary procedures into separate class or/and namespace.
     protected static void writeString(WritableByteChannel out, String message) throws IOException {
@@ -94,6 +66,34 @@ public abstract class SentEntity {
             in.read(buffer);
         }
         buffer.flip();
+    }
+
+    public abstract void write(WritableByteChannel out) throws IOException;
+
+    public abstract void read(ReadableByteChannel in) throws IOException;
+
+    public abstract String debugString();
+
+    protected void setInitialized() {
+        initialized = true;
+    }
+
+    protected void checkForEmptyness() {
+        if (initialized) {
+            throw new SentEntityException(this.getClass().getName() + " should be empty");
+        }
+    }
+
+    protected void checkForNonEmptyness() {
+        if (!initialized) {
+            throw new SentEntityException(this.getClass().getName() + " should not be empty");
+        }
+    }
+
+    static class SentEntityException extends RuntimeException {
+        SentEntityException(String message) {
+            super(message);
+        }
     }
 }
 

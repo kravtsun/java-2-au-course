@@ -14,6 +14,9 @@ public class Client extends AbstractClient implements Closeable {
     private static final Logger logger = LogManager.getLogger("client");
     private SocketChannel socketChannel;
 
+    public Client() throws IOException {
+    }
+
     public static void main(String []args) {
         CommandLineParser parser = new DefaultParser();
         Options options = new Options();
@@ -36,7 +39,9 @@ public class Client extends AbstractClient implements Closeable {
         final String getRequestPrefix = "get ";
         final String listRequestPrefix = "list ";
         final Scanner scanner = new Scanner(System.in);
-        try (Client client = new Client()) {
+        AbstractClient client = null;
+        try {
+            client = new Client();
             try {
                 client.connect(hostName, portNumber);
             } catch (IOException e) {
@@ -67,9 +72,15 @@ public class Client extends AbstractClient implements Closeable {
         catch (Exception e) {
             logger.error(e);
         }
-    }
-
-    public Client() throws IOException {
+        finally {
+            try {
+                if (client != null) {
+                    client.disconnect();
+                }
+            } catch (IOException e) {
+                logger.error("error while disconnecting: " + e);
+            }
+        }
     }
 
     @Override
@@ -85,6 +96,9 @@ public class Client extends AbstractClient implements Closeable {
 
     @Override
     public synchronized void disconnect() throws IOException {
+        if (isConnected()) {
+            executeExit();
+        }
         if (socketChannel != null) {
             if (socketChannel.isConnected()) {
                 executeExit();
@@ -132,21 +146,24 @@ public class Client extends AbstractClient implements Closeable {
         return response;
     }
     
-    private synchronized boolean isConnected() {
-        return socketChannel != null && socketChannel.isConnected();
-    }
-
-    private synchronized EchoResponse executeExit() {
+    public synchronized EchoResponse executeExit() {
+        if (!isConnected()) {
+            return null;
+        }
         try {
             EchoRequest request = new EchoRequest(EchoRequest.EXIT_MESSAGE);
             EchoResponse response = new EchoResponse();
             executeRequest(request, response);
             return response;
         }
-        catch (IOException e) {
+        catch (Exception e) {
             logger.info("Suppressing error on exiting client: " + e);
             return null;
         }
+    }
+
+    public synchronized boolean isConnected() {
+        return socketChannel != null && socketChannel.isConnected();
     }
 
     private void executeRequest(Request request, Response response) throws IOException {

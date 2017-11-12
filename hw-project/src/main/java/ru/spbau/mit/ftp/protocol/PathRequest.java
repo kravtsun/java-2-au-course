@@ -1,7 +1,5 @@
 package ru.spbau.mit.ftp.protocol;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
@@ -9,9 +7,9 @@ import java.nio.channels.WritableByteChannel;
 public abstract class PathRequest extends Request {
     private String path;
 
-    public PathRequest() {}
+    PathRequest() {}
 
-    public PathRequest(String path) {
+    PathRequest(String path) {
         this.path = path;
         setInitialized();
     }

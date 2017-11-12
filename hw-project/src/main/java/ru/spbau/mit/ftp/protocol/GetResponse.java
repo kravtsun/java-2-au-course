@@ -8,6 +8,10 @@ import java.nio.channels.WritableByteChannel;
 public class GetResponse extends Response {
     private final String path;
 
+    private GetResponse(String path) {
+        this.path = path;
+    }
+
     public static GetResponse serverGetResponse(String sourcePath) throws FileNotFoundException {
         GetResponse response = new GetResponse(sourcePath);
         response.setInitialized();
@@ -16,10 +20,6 @@ public class GetResponse extends Response {
 
     public static GetResponse clientGetResponse(String outputPath) {
         return new GetResponse(outputPath);
-    }
-
-    private GetResponse(String path) {
-        this.path = path;
     }
 
     @Override

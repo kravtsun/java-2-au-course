@@ -21,24 +21,6 @@ public abstract class Request extends SentEntity {
         return request;
     }
 
-    public static class RequestException extends RuntimeException {
-        RequestException(String message) {
-            super(message);
-        }
-    }
-
-    protected enum RequestCode {
-        ECHO(0),
-        LIST(1),
-        GET(2);
-
-        private final int intValue;
-
-        RequestCode(int value) {
-            this.intValue = value;
-        }
-    }
-
     @Override
     public void write(WritableByteChannel out) throws IOException {
         checkForNonEmptyness();
@@ -61,4 +43,22 @@ public abstract class Request extends SentEntity {
     }
 
     protected abstract void readOther(ReadableByteChannel in) throws IOException;
+
+    protected enum RequestCode {
+        ECHO(0),
+        LIST(1),
+        GET(2);
+
+        private final int intValue;
+
+        RequestCode(int value) {
+            this.intValue = value;
+        }
+    }
+
+    public static class RequestException extends RuntimeException {
+        RequestException(String message) {
+            super(message);
+        }
+    }
 }

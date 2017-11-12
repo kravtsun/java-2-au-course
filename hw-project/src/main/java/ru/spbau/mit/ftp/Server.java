@@ -23,9 +23,17 @@ import ru.spbau.mit.ftp.protocol.*;
 public class Server extends AbstractServer implements Closeable {
     private static final Logger logger = LogManager.getLogger("server");
     private final ExecutorService executorService;
+    private final List<SocketChannel> sockets = new ArrayList<>();
     private ServerSocketChannel serverSocketChannel;
 
-    private List<SocketChannel> sockets = new ArrayList<>();
+    public Server(int nthreads) throws ServerException {
+        try {
+            executorService = Executors.newFixedThreadPool(nthreads);
+        }
+        catch (Exception e) {
+            throw new ServerException(e);
+        }
+    }
 
     public static void main(String[] args) {
         CommandLineParser parser = new DefaultParser();
@@ -61,15 +69,6 @@ public class Server extends AbstractServer implements Closeable {
             }
         } catch (Exception e) {
             logger.error(e);
-        }
-    }
-
-    public Server(int nthreads) throws ServerException {
-        try {
-            executorService = Executors.newFixedThreadPool(nthreads);
-        }
-        catch (Exception e) {
-            throw new ServerException(e);
         }
     }
 
