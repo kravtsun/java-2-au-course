@@ -6,15 +6,17 @@ import org.apache.logging.log4j.Logger;
 import ru.spbau.mit.ftp.protocol.*;
 
 import java.io.*;
+import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.util.Base64;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.SocketChannel;
+import java.nio.channels.WritableByteChannel;
 import java.util.Scanner;
 
 public class Client extends AbstractClient {
     private static final Logger logger = LogManager.getLogger("client");
-    private Socket socket;
-    private DataOutputStream out;
-    private DataInputStream in;
+//    private Socket socket;
+    private SocketChannel socketChannel;
 
     public static void main(String []args) {
         CommandLineParser parser = new DefaultParser();
@@ -35,7 +37,14 @@ public class Client extends AbstractClient {
             return;
         }
 
-        Client client = new Client();
+        Client client;
+        try {
+            client = new Client();
+        } catch (IOException e) {
+            logger.error("Failed to setup client: " + e.getMessage());
+            return;
+        }
+
         try {
             client.connect(hostName, portNumber);
         } catch (IOException e) {
@@ -65,34 +74,32 @@ public class Client extends AbstractClient {
         }
     }
 
+    public Client() throws IOException {
+        socketChannel = SocketChannel.open();
+    }
+
     @Override
     public void connect(String hostName, int port) throws IOException {
         logger.info(String.format("Starting socket for %s:%d", hostName, port));
-        socket = new Socket(hostName, port);
 
-        out = new DataOutputStream(socket.getOutputStream());
-//        out = new PrintWriter(socket.getOutputStream(), true); DO NOT FORGET TO FLUSH!!!
-        in = new DataInputStream(socket.getInputStream());
+        socketChannel.connect(new InetSocketAddress(hostName, port));
         // receiving hello from server.
-        String msg = in.readUTF();
+        String msg = SentEntity.readString(socketChannel);
         logger.info("received: " + msg);
     }
 
     @Override
     public void disconnect() throws ClientNotConnectedException, IOException {
-        if (socket == null) {
-            throw new ClientNotConnectedException();
+        if (socketChannel.isConnected()) {
+            socketChannel.close();
         } else {
-            in.close();
-            out.close();
-            socket.close();
-            socket = null;
+            throw new ClientNotConnectedException();
         }
     }
 
     @Override
     public void executeList(String path) throws ClientNotConnectedException, IOException {
-        if (socket == null) {
+        if (!socketChannel.isConnected()) {
             throw new ClientNotConnectedException();
         }
         ListRequest request = new ListRequest(path);
@@ -102,14 +109,13 @@ public class Client extends AbstractClient {
 
     @Override
     public void executeGet(String path) throws ClientNotConnectedException, IOException {
-        if (socket == null) {
+        if (!socketChannel.isConnected()) {
             throw new ClientNotConnectedException();
         }
-        assert false;
     }
 
     public void executeSimple(String message) throws ClientNotConnectedException, IOException {
-        if (socket == null) {
+        if (!socketChannel.isConnected()) {
             throw new ClientNotConnectedException();
         }
         SimpleRequest request = new SimpleRequest(message);
@@ -119,9 +125,8 @@ public class Client extends AbstractClient {
 
     private void executeRequest(Request request, Response response) throws IOException {
         logger.info("sent: " + request.toString() + ": " + request.debugString());
-        request.write(out);
-        out.flush();
-        response.read(in);
+        request.write(socketChannel);
+        response.read(socketChannel);
         logger.info("received: " + response.toString() + ": " + response.debugString());
     }
 }

@@ -3,6 +3,8 @@ package ru.spbau.mit.ftp.protocol;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.WritableByteChannel;
 
 public class SimpleResponse extends Response {
     private String message;
@@ -15,15 +17,15 @@ public class SimpleResponse extends Response {
     }
 
     @Override
-    public void write(DataOutputStream out) throws IOException {
+    public void write(WritableByteChannel out) throws IOException {
         checkForNonEmptyness();
-        out.writeUTF(message);
+        writeString(out, message);
     }
 
     @Override
-    public void read(DataInputStream in) throws IOException {
+    public void read(ReadableByteChannel in) throws IOException {
         checkForEmptyness();
-        message = in.readUTF();
+        message = readString(in);
     }
 
     @Override

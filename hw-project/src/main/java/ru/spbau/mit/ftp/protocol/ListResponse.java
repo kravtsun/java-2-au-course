@@ -4,6 +4,8 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -27,21 +29,21 @@ public class ListResponse extends Response {
     }
 
     @Override
-    public void write(DataOutputStream out) throws IOException {
+    public void write(WritableByteChannel out) throws IOException {
         checkForNonEmptyness();
-        out.writeInt(fileNames.size());
+        writeInt(out, fileNames.size());
         for (String filename : fileNames) {
-            out.writeUTF(filename);
+            writeString(out, filename);
         }
     }
 
     @Override
-    public void read(DataInputStream in) throws IOException {
+    public void read(ReadableByteChannel in) throws IOException {
         checkForEmptyness();
-        int count = in.readInt();
+        int count = readInt(in);
         fileNames = new ArrayList<String>();
         for (int i = 0; i < count; ++i) {
-            fileNames.add(in.readUTF());
+            fileNames.add(readString(in));
         }
     }
 
@@ -50,6 +52,6 @@ public class ListResponse extends Response {
         if (fileNames == null) {
             return null;
         }
-        return fileNames.stream().collect(Collectors.joining("\n"));
+        return fileNames.size() + "\n" + fileNames.stream().collect(Collectors.joining("\n"));
     }
 }

@@ -3,9 +3,13 @@ package ru.spbau.mit.ftp;
 import org.apache.commons.cli.*;
 
 import java.io.*;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Base64;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.nio.channels.WritableByteChannel;
 import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -18,7 +22,7 @@ import ru.spbau.mit.ftp.protocol.*;
 public class Server extends AbstractServer {
     private static final Logger logger = LogManager.getLogger("server");
     private final ExecutorService executorService;
-    private final int port;
+    private final ServerSocketChannel serverSocketChannel;
     private volatile boolean isInterrupted = false;
     private volatile boolean isFinished = false;
 
@@ -42,7 +46,12 @@ public class Server extends AbstractServer {
         }
 
         logger.info(String.format("Starting server on localhost:%d, with %d threads", portNumber, nthreads));
-        Server server = new Server(portNumber, nthreads);
+        Server server = null;
+        try {
+            server = new Server(portNumber, nthreads);
+        } catch (IOException e) {
+            logger.error("Failed to start server: " + e.getMessage());
+        }
         try {
             server.start();
             Scanner scanner = new Scanner(System.in);
@@ -60,20 +69,22 @@ public class Server extends AbstractServer {
         }
     }
 
-    public Server(int port, int nthreads) {
+    public Server(int port, int nthreads) throws IOException {
         executorService = Executors.newFixedThreadPool(nthreads);
-        this.port = port;
+        serverSocketChannel = ServerSocketChannel.open();
+        serverSocketChannel.bind(new InetSocketAddress("localhost", port));
+        logger.info("Starting socket for " + serverSocketChannel.getLocalAddress());
     }
 
     @Override
     public void start() {
         new Thread(() -> {
-            try (ServerSocket serverSocket = new ServerSocket(port)) {
+            try {
                 while (!isInterrupted) {
-                    executorService.submit(new FTPServerSession(serverSocket.accept()));
+                    executorService.submit(new FTPServerSession(serverSocketChannel));
                 }
-            } catch (IOException e) {
-                logger.error("Could not listen on port " + port);
+            } catch (Exception e) {
+                logger.error(e.getMessage());
                 isInterrupted = true;
             }
             synchronized (this) {
@@ -101,30 +112,28 @@ public class Server extends AbstractServer {
     private static class FTPServerSession implements Runnable {
         private static final Logger logger = LogManager.getLogger("session");
         private static final AtomicInteger sessionsCount = new AtomicInteger(0);
-        private final Socket socket;
+//        private final ServerSocketChannel socket;
+        private final SocketChannel socketChannel;
         private final int sessionId;
 
-        FTPServerSession(Socket socket) {
-            this.socket = socket;
+        FTPServerSession(ServerSocketChannel serverSocketChannel) throws IOException {
+            socketChannel = serverSocketChannel.accept();
             this.sessionId = sessionsCount.incrementAndGet();
         }
 
         @Override
         public void run() {
-            try (
-                    DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-                    DataInputStream in = new DataInputStream(socket.getInputStream())
-            ) {
-                out.writeUTF("Hello from server, session #" + sessionId);
+            try {
+                SentEntity.writeString(socketChannel, "Hello from server, session #" + sessionId);
                 logger.info(logMessage("starting IO loop"));
                 while (true) {
                     SentEntity response;
                     boolean receivedExitMessage = false;
                     try {
-                        Request request = Request.parse(in);
+                        Request request = Request.parse(socketChannel);
                         logger.info("received: " + request + ": " + request.debugString());
-                        if (request instanceof ListRequest) {
-                            String path = ((ListRequest) request).getPath();
+                        if (request instanceof PathRequest) {
+                            String path = ((PathRequest) request).getPath();
                             File[] files = new File(path).listFiles();
                             response = new ListResponse(files);
                         } else if (request instanceof SimpleRequest) {
@@ -138,14 +147,13 @@ public class Server extends AbstractServer {
                         logger.error(logMessage(e.getMessage()));
                         response = new SimpleResponse("Dealing request exception: " + e.getMessage());
                     }
-                    response.write(out);
+                    response.write(socketChannel);
                     logger.info(logMessage("sent: " + response + ": " + response.debugString()));
                     if (receivedExitMessage) {
                         break;
                     }
                 }
                 logger.info(logMessage("closing socket"));
-                socket.close();
             } catch (Exception e) {
                 logger.error(logMessage(e.getMessage()));
             }

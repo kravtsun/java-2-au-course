@@ -3,10 +3,12 @@ package ru.spbau.mit.ftp.protocol;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.WritableByteChannel;
 
 public abstract class Request extends SentEntity {
-    public static Request parse(DataInputStream in) throws IOException {
-        int code = in.readInt();
+    public static Request parse(ReadableByteChannel in) throws IOException {
+        int code = readInt(in);
         Request request;
         if (code == RequestCode.SIMPLE.intValue) {
             request = new SimpleRequest();
@@ -38,25 +40,25 @@ public abstract class Request extends SentEntity {
     }
 
     @Override
-    public void write(DataOutputStream out) throws IOException {
+    public void write(WritableByteChannel out) throws IOException {
         checkForNonEmptyness();
-        out.writeInt(code().intValue);
+        writeInt(out, code().intValue);
         writeOther(out);
     }
 
     protected abstract RequestCode code();
 
-    protected abstract void writeOther(DataOutputStream out) throws IOException;
+    protected abstract void writeOther(WritableByteChannel out) throws IOException;
 
     @Override
-    public void read(DataInputStream in) throws IOException {
+    public void read(ReadableByteChannel in) throws IOException {
         checkForEmptyness();
-        int code = in.readInt();
+        int code = readInt(in);
         if (code != code().intValue) {
-            throw new RequestException(String.format("Wrong code: %d, expected %d", code, code()));
+            throw new RequestException(String.format("Wrong code: %d, expected %d", code, code().intValue));
         }
         readOther(in);
     }
 
-    protected abstract void readOther(DataInputStream in) throws IOException;
+    protected abstract void readOther(ReadableByteChannel in) throws IOException;
 }

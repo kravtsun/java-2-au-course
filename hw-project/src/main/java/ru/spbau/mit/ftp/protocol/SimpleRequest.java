@@ -3,6 +3,9 @@ package ru.spbau.mit.ftp.protocol;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.WritableByteChannel;
 
 public class SimpleRequest extends Request {
     public static final String EXIT_MESSAGE = "exit";
@@ -22,13 +25,13 @@ public class SimpleRequest extends Request {
     }
 
     @Override
-    protected void writeOther(DataOutputStream out) throws IOException {
-        out.writeUTF(message);
+    protected void writeOther(WritableByteChannel out) throws IOException {
+        writeString(out, message);
     }
 
     @Override
-    protected void readOther(DataInputStream in) throws IOException {
-        message = in.readUTF();
+    protected void readOther(ReadableByteChannel in) throws IOException {
+        message = readString(in);
     }
 
     public String getMessage() {
