@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.logging.log4j.LogManager;
@@ -20,16 +22,14 @@ import ru.spbau.mit.ftp.protocol.*;
 
 public class Server extends AbstractServer {
     private static final Logger LOGGER = LogManager.getLogger("server");
-    private final ExecutorService executorService;
+    private final int nthreads;
+    private ExecutorService executorService;
     private final List<SocketChannel> sockets = new ArrayList<>();
+    private final List<Future> futures = new ArrayList<>();
     private ServerSocketChannel serverSocketChannel;
 
-    public Server(int nthreads) throws ServerException {
-        try {
-            executorService = Executors.newFixedThreadPool(nthreads);
-        } catch (Exception e) {
-            throw new ServerException(e);
-        }
+    public Server(int nthreads) {
+        this.nthreads = nthreads;
     }
 
     public static void main(String[] args) {
@@ -54,7 +54,7 @@ public class Server extends AbstractServer {
             return;
         }
 
-        try (AbstractServer server = new Server(nthreads)) {
+        try (Server server = new Server(nthreads)) {
             server.start(hostName, portNumber);
             Scanner scanner = new Scanner(System.in);
             while (true) {
@@ -71,6 +71,8 @@ public class Server extends AbstractServer {
 
     @Override
     public synchronized void start(String hostName, int port) throws IOException, ServerException {
+        executorService = Executors.newFixedThreadPool(nthreads);
+
         if (serverSocketChannel != null && serverSocketChannel.isOpen()) {
             throw new ServerException("server already running");
         }
@@ -88,19 +90,16 @@ public class Server extends AbstractServer {
                     }
                     SocketChannel socketChannel = serverSocketChannel.accept();
                     if (socketChannel != null) {
-                        sockets.add(socketChannel);
-                        executorService.submit(new FTPServerSession(socketChannel));
+                        synchronized (this) {
+                            sockets.add(socketChannel);
+                            futures.add(executorService.submit(new FTPServerSession(socketChannel)));
+                        }
                     }
                 }
             } catch (AsynchronousCloseException ignored) {
                 LOGGER.info("closing serverSocketChannel by stop() request");
             } catch (Exception e) {
                 LOGGER.error(e);
-                try {
-                    stop();
-                } catch (IOException e1) {
-                    throw new RuntimeException(e1);
-                }
             }
         }).start();
         while (!isStarted[0]) {
@@ -110,13 +109,32 @@ public class Server extends AbstractServer {
 
     @Override
     public synchronized void stop() throws IOException {
+        LOGGER.debug("entering stop");
         if (serverSocketChannel != null) {
-            for (SocketChannel socket : sockets) {
-                socket.close();
+            if (sockets.size() != futures.size()) {
+                LOGGER.fatal("sockets.size() != futures.size()");
+            }
+            for (int i = 0; i < sockets.size(); i++) {
+                SocketChannel socketChannel = sockets.get(i);
+                Future future = futures.get(i);
+                if (socketChannel.isOpen()) {
+                    socketChannel.close();
+                }
+                future.cancel(true);
             }
             sockets.clear();
+            futures.clear();
             serverSocketChannel.close();
         }
+        executorService.shutdown();
+        while (!executorService.isTerminated()) {
+            try {
+                executorService.awaitTermination(1, TimeUnit.SECONDS);
+            } catch (InterruptedException ignored) {
+                break;
+            }
+        }
+        LOGGER.debug("exiting stop");
     }
 
     @Override
@@ -141,53 +159,51 @@ public class Server extends AbstractServer {
                 EchoResponse.INIT_RESPONSE.write(socketChannel);
                 LOGGER.info(logMessage("starting IO loop"));
                 while (true) {
-                    SentEntity response;
-                    boolean receivedExitMessage = false;
                     Request request = Request.parse(socketChannel);
-                    LOGGER.info("received: " + request + ": " + request.debugString());
-                    if (request instanceof EchoRequest) {
-                        String receivedMessage = ((EchoRequest) request).getMessage();
-                        if (receivedMessage.equals(EchoRequest.EXIT_MESSAGE)) {
-                            receivedExitMessage = true;
-                            response = EchoResponse.EXIT_RESPONSE;
-                        } else {
-                            response = new EchoResponse(receivedMessage);
-                        }
-                    } else if (request instanceof ListRequest) {
-                        String path = ((ListRequest) request).getPath();
-                        File[] files = new File(path).listFiles();
-                        response = new ListResponse(files);
-                    } else if (request instanceof GetRequest) {
-                        String path = ((GetRequest) request).getPath();
-                        File file = new File(path);
-                        if (!file.exists() || file.isDirectory()) {
-                            throw new ServerException("file " + path + " is not regular");
-                        }
-                        response = GetResponse.serverGetResponse(path);
-                    } else {
-                        throw new ServerException("Unknown request: " + request);
-                    }
+                    Response response = dealRequest(request);
                     response.write(socketChannel);
                     LOGGER.debug(logMessage("sent: " + response + ": " + response.debugString()));
-                    if (receivedExitMessage) {
+                    if (response.equals(EchoResponse.EXIT_RESPONSE)) {
                         break;
                     }
                 }
                 LOGGER.info(logMessage("closing socket"));
             } catch (Exception e) {
                 LOGGER.error(logMessage(e.toString()));
+            } finally {
                 try {
-                    EchoResponse.EXIT_RESPONSE.write(socketChannel);
-                } catch (IOException e1) {
-                    LOGGER.error(logMessage(e1.toString()));
+                    if (socketChannel.isOpen()) {
+                        EchoResponse.EXIT_RESPONSE.write(socketChannel);
+                        socketChannel.close();
+                    }
+                } catch (IOException e) {
+                    LOGGER.error(logMessage(e.toString()));
                 }
             }
-            try {
-                socketChannel.close();
-            } catch (IOException e) {
-                LOGGER.error("Error while trying to close socketChannel: " + e);
-            }
             LOGGER.info(logMessage("exiting..."));
+        }
+
+        private Response dealRequest(Request request) throws ServerException {
+            LOGGER.info(logMessage("received: " + request + ": " + request.debugString()));
+            Response response;
+            if (request instanceof EchoRequest) {
+                String receivedMessage = ((EchoRequest) request).getMessage();
+                if (receivedMessage.equals(EchoRequest.EXIT_MESSAGE)) {
+                    response = EchoResponse.EXIT_RESPONSE;
+                } else {
+                    response = new EchoResponse(receivedMessage);
+                }
+            } else if (request instanceof ListRequest) {
+                String path = ((ListRequest) request).getPath();
+                File[] files = new File(path).listFiles();
+                response = new ListResponse(files);
+            } else if (request instanceof GetRequest) {
+                String path = ((GetRequest) request).getPath();
+                response = GetResponse.serverGetResponse(path);
+            } else {
+                throw new ServerException("Unknown request: " + request);
+            }
+            return response;
         }
 
         private String logMessage(String message) {

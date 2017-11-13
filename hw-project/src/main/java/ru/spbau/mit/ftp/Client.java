@@ -39,7 +39,7 @@ public class Client extends AbstractClient implements Closeable {
         final String getRequestPrefix = "get ";
         final String listRequestPrefix = "list ";
         final Scanner scanner = new Scanner(System.in);
-        AbstractClient client = null;
+        Client client = null;
         try {
             client = new Client();
             try {
@@ -50,6 +50,9 @@ public class Client extends AbstractClient implements Closeable {
             }
             String command;
             while ((command = scanner.nextLine()) != null) {
+                if (command.isEmpty()) {
+                    continue;
+                }
                 if (command.length() > getRequestPrefix.length()
                         && command.substring(0, getRequestPrefix.length()).equals(getRequestPrefix)) {
                     String path = command.substring(getRequestPrefix.length());
@@ -59,24 +62,21 @@ public class Client extends AbstractClient implements Closeable {
                         && command.substring(0, listRequestPrefix.length()).equals(listRequestPrefix)) {
                     String path = command.substring(listRequestPrefix.length());
                     client.executeList(path);
-                } else {
-                    client.executeEcho(command);
-                }
-
-                if (command.equals(EchoRequest.EXIT_MESSAGE)) {
+                } else if (command.equals(EchoRequest.EXIT_MESSAGE)) {
                     client.executeExit();
                     break;
+                } else {
+                    client.executeEcho(command);
                 }
             }
         } catch (Exception e) {
             LOGGER.error(e);
-        } finally {
             try {
                 if (client != null) {
                     client.disconnect();
                 }
-            } catch (IOException e) {
-                LOGGER.error("error while disconnecting: " + e);
+            } catch (IOException e1) {
+                LOGGER.error("error while disconnecting: " + e1);
             }
         }
     }
@@ -94,9 +94,7 @@ public class Client extends AbstractClient implements Closeable {
 
     @Override
     public synchronized void disconnect() throws IOException {
-        if (isConnected()) {
-            executeExit();
-        }
+        executeExit();
         if (socketChannel != null) {
             if (socketChannel.isConnected()) {
                 executeExit();
@@ -112,7 +110,8 @@ public class Client extends AbstractClient implements Closeable {
     }
 
     @Override
-    public synchronized ListResponse executeList(String path) throws ClientNotConnectedException, IOException {
+    public synchronized ListResponse executeList(String path)
+            throws ClientNotConnectedException, IOException {
         if (!isConnected()) {
             throw new ClientNotConnectedException();
         }
@@ -135,7 +134,8 @@ public class Client extends AbstractClient implements Closeable {
         return response;
     }
 
-    public synchronized EchoResponse executeEcho(String message) throws ClientNotConnectedException, IOException {
+    public synchronized EchoResponse executeEcho(String message)
+            throws ClientNotConnectedException, IOException {
         if (!isConnected()) {
             throw new ClientNotConnectedException();
         }

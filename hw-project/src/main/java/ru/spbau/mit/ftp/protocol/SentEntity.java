@@ -19,13 +19,13 @@ public abstract class SentEntity {
 
     protected void checkForEmptyness() {
         if (initialized) {
-            throw new SentEntity.SentEntityException(this.getClass().getName() + " should be empty");
+            throw new SentEntityException(this.getClass().getName() + " should be empty");
         }
     }
 
     protected void checkForNonEmptyness() {
         if (!initialized) {
-            throw new SentEntity.SentEntityException(this.getClass().getName() + " should not be empty");
+            throw new SentEntityException(this.getClass().getName() + " should not be empty");
         }
     }
 

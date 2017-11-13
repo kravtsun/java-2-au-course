@@ -28,9 +28,14 @@ public final class GetResponse extends Response {
     @Override
     public void write(WritableByteChannel out) throws IOException {
         checkForNonEmptyness();
-        try (FileChannel sourceChannel = new RandomAccessFile(path, "r").getChannel()) {
-            writeLong(out, sourceChannel.size());
-            sourceChannel.transferTo(0, sourceChannel.size(), out);
+        File sourceFile = new File(path);
+        if (!sourceFile.exists() || sourceFile.isDirectory()) {
+            writeLong(out, 0);
+        } else {
+            try (FileChannel sourceChannel = new FileInputStream(sourceFile).getChannel()) {
+                writeLong(out, sourceChannel.size());
+                sourceChannel.transferTo(0, sourceChannel.size(), out);
+            }
         }
     }
 

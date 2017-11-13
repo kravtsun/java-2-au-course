@@ -52,7 +52,7 @@ final class NIOProcedures {
 
     private static void writeUntil(ByteBuffer buffer, WritableByteChannel out) throws IOException {
         if (buffer.position() != buffer.capacity()) {
-            throw new SentEntity.SentEntityException("Buffer is not full.");
+            throw new NIOException("Buffer is not full.");
         }
         buffer.flip();
         while (buffer.hasRemaining()) {
@@ -62,11 +62,17 @@ final class NIOProcedures {
 
     private static void readUntil(ByteBuffer buffer, ReadableByteChannel in) throws IOException {
         if (buffer.position() == buffer.limit()) {
-            throw new SentEntity.SentEntityException("Buffer is full.");
+            throw new NIOException("Buffer is full.");
         }
         while (buffer.position() != buffer.capacity()) {
             in.read(buffer);
         }
         buffer.flip();
+    }
+
+    public static class NIOException extends RuntimeException {
+        NIOException(String message) {
+            super(message);
+        }
     }
 }
