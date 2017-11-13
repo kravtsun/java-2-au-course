@@ -10,7 +10,7 @@ import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
 import java.util.Scanner;
 
-public class Client extends AbstractClient implements Closeable {
+public class Client extends AbstractClient {
     private static final Logger LOGGER = LogManager.getLogger("client");
     private SocketChannel socketChannel;
 
@@ -39,9 +39,8 @@ public class Client extends AbstractClient implements Closeable {
         final String getRequestPrefix = "get ";
         final String listRequestPrefix = "list ";
         final Scanner scanner = new Scanner(System.in);
-        Client client = null;
-        try {
-            client = new Client();
+
+        try (AbstractClient client = new Client()) {
             try {
                 client.connect(hostName, portNumber);
             } catch (IOException e) {
@@ -71,13 +70,6 @@ public class Client extends AbstractClient implements Closeable {
             }
         } catch (Exception e) {
             LOGGER.error(e);
-            try {
-                if (client != null) {
-                    client.disconnect();
-                }
-            } catch (IOException e1) {
-                LOGGER.error("error while disconnecting: " + e1);
-            }
         }
     }
 
@@ -160,7 +152,7 @@ public class Client extends AbstractClient implements Closeable {
         }
     }
 
-    public synchronized boolean isConnected() {
+    synchronized boolean isConnected() {
         return socketChannel != null && socketChannel.isConnected();
     }
 

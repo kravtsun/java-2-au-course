@@ -21,7 +21,7 @@ public class Server extends AbstractServer {
     private final int nthreads;
     private ExecutorService executorService;
     private ServerSocketChannel serverSocketChannel;
-    private List<SocketChannel> sockets = new ArrayList<>();
+    private final List<SocketChannel> sockets = new ArrayList<>();
 
     public Server(int nthreads) {
         this.nthreads = nthreads;

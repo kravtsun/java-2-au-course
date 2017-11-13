@@ -4,9 +4,10 @@ import ru.spbau.mit.ftp.protocol.EchoResponse;
 import ru.spbau.mit.ftp.protocol.GetResponse;
 import ru.spbau.mit.ftp.protocol.ListResponse;
 
+import java.io.Closeable;
 import java.io.IOException;
 
-public abstract class AbstractClient {
+public abstract class AbstractClient implements Closeable {
     public abstract EchoResponse connect(String hostName, int port) throws IOException;
 
     public abstract void disconnect() throws IOException;
