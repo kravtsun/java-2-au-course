@@ -4,25 +4,18 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.omg.CORBA.TIMEOUT;
 import ru.spbau.mit.ftp.protocol.EchoResponse;
 import ru.spbau.mit.ftp.protocol.GetResponse;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.IOException;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channel;
 import java.nio.channels.FileChannel;
-import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-import static com.sun.xml.internal.fastinfoset.algorithm.IntegerEncodingAlgorithm.INT_SIZE;
-import static com.sun.xml.internal.fastinfoset.algorithm.IntegerEncodingAlgorithm.LONG_SIZE;
 import static org.apache.commons.io.FileUtils.contentEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -31,15 +24,14 @@ import static ru.spbau.mit.ftp.ServerTest.HOST_NAME;
 import static ru.spbau.mit.ftp.ServerTest.PORT;
 
 public class BigFileTest {
+    private static File bigFile;
     private Server server;
     private Client client;
-    private static File bigFile;
-    private static long BIG_FILE_SIZE = 10_000_000;
-    private static int NUM_CLIENTS = 4;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        bigFile = createBigFile(BIG_FILE_SIZE);
+        long bigFileSize = 100_000_000;
+        bigFile = createBigFile(bigFileSize);
         assertTrue(bigFile.exists());
     }
 
@@ -71,12 +63,12 @@ public class BigFileTest {
 
     @Test
     public void severalClientsGetBigFileTest() throws Exception {
-        ExecutorService executor = Executors.newFixedThreadPool(NUM_CLIENTS);
+        int numClients = 4;
+        ExecutorService executor = Executors.newFixedThreadPool(numClients);
         AtomicBoolean isFinished = new AtomicBoolean(false);
-        Future[] futures = new Future[NUM_CLIENTS];
-        CountDownLatch countDownLatch = new CountDownLatch(NUM_CLIENTS);
-        boolean[] counts = new boolean[NUM_CLIENTS];
-        for (int i = 0; i < NUM_CLIENTS; i++) {
+        Future[] futures = new Future[numClients];
+        CountDownLatch countDownLatch = new CountDownLatch(numClients);
+        for (int i = 0; i < numClients; i++) {
             int finalI = i;
             futures[i] = executor.submit(() -> {
                 int count = 0;
@@ -84,7 +76,6 @@ public class BigFileTest {
 
                     assertEquals(EchoResponse.INIT_RESPONSE, client.connect(HOST_NAME, PORT));
                     while (!isFinished.get()) {
-                        counts[finalI] = true;
                         getBigFileTest(client);
                         Thread.yield();
                         count++;

@@ -126,6 +126,7 @@ public class Client extends AbstractClient {
         return response;
     }
 
+    @Override
     public synchronized EchoResponse executeEcho(String message)
             throws ClientNotConnectedException, IOException {
         if (!isConnected()) {
@@ -137,6 +138,7 @@ public class Client extends AbstractClient {
         return response;
     }
 
+    @Override
     public synchronized EchoResponse executeExit() {
         if (!isConnected()) {
             return null;

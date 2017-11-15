@@ -38,7 +38,6 @@ public class Server extends AbstractServer {
             hostName = commandLine.getOptionValue("host", "localhost");
             String portString = commandLine.getOptionValue("port");
             portNumber = Integer.parseInt(portString);
-            String nthreadsString = commandLine.getOptionValue("threads", "5");
         } catch (Throwable t) {
             LOGGER.error("Failed to parse arguments: " + t);
             return;
@@ -78,10 +77,7 @@ public class Server extends AbstractServer {
         new Thread(() -> {
             try {
                 isStarted[0] = true;
-                while (true) {
-                    if (!serverSocketChannel.isOpen()) {
-                        break;
-                    }
+                while (serverSocketChannel.isOpen()) {
                     SocketChannel socketChannel = serverSocketChannel.accept();
                     if (socketChannel != null) {
                         executorService.submit(new ServerSession(socketChannel));
