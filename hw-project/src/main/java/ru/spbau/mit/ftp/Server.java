@@ -18,24 +18,20 @@ import ru.spbau.mit.ftp.protocol.*;
 
 public class Server extends AbstractServer {
     private static final Logger LOGGER = LogManager.getLogger("server");
-    private final int nthreads;
     private ExecutorService executorService;
     private ServerSocketChannel serverSocketChannel;
     private final List<SocketChannel> sockets = new ArrayList<>();
 
-    public Server(int nthreads) {
-        this.nthreads = nthreads;
+    public Server() {
     }
 
     public static void main(String[] args) {
         CommandLineParser parser = new DefaultParser();
         Options options = new Options();
         options.addRequiredOption(null, "port", true, "Port to start listening at");
-        options.addOption("j", "threads", true, "number of worker threads to run");
         options.addOption("h", "host", true, "hostName to bind to (should be available)");
         String hostName;
         int portNumber;
-        int nthreads;
         try {
             LOGGER.debug("Parsing options: " + options);
             CommandLine commandLine = parser.parse(options, args);
@@ -43,13 +39,12 @@ public class Server extends AbstractServer {
             String portString = commandLine.getOptionValue("port");
             portNumber = Integer.parseInt(portString);
             String nthreadsString = commandLine.getOptionValue("threads", "5");
-            nthreads = Integer.parseInt(nthreadsString);
         } catch (Throwable t) {
             LOGGER.error("Failed to parse arguments: " + t);
             return;
         }
 
-        try (Server server = new Server(nthreads)) {
+        try (Server server = new Server()) {
             server.start(hostName, portNumber);
             Scanner scanner = new Scanner(System.in);
             while (true) {
@@ -71,7 +66,7 @@ public class Server extends AbstractServer {
             throw new ServerException("server already running");
         }
         try {
-            executorService = Executors.newFixedThreadPool(nthreads);
+            executorService = Executors.newCachedThreadPool();
         } catch (IllegalArgumentException e) {
             throw new ServerException(e);
         }
