@@ -3,6 +3,8 @@ version '1.0-SNAPSHOT'
 
 apply plugin: 'java'
 
+apply plugin: 'checkstyle'
+
 sourceCompatibility = 1.8
 
 repositories {
@@ -11,4 +13,20 @@ repositories {
 
 dependencies {
     testCompile group: 'junit', name: 'junit', version: '4.12'
+    // https://mvnrepository.com/artifact/org.openjdk.jcstress/jcstress-core
+    // testCompile group: 'org.openjdk.jcstress', name: 'jcstress-core', version: '0.4'
 }
+
+test {
+    testLogging.showStandardStreams = true
+}
+
+compileJava {
+    options.compilerArgs += ["-Xlint:unchecked"]
+}
+
+compileTestJava {
+    options.compilerArgs += ["-Xlint:unchecked"]
+}
+
+
