@@ -1,0 +1,42 @@
+syntax = "proto2";
+option java_package = "ru.spbau.mit.proto";
+
+import "common.proto";
+
+// from client to tracker.
+message ListRequest {
+}
+message ListResponse {
+    required int32 count = 1;
+    repeated FileInfo files = 2;
+}
+
+message UploadRequest {
+    required string name = 1;
+    required int64 size = 2;
+}
+message UploadResponse {
+    required int32 fileId = 1;
+}
+
+message SourcesRequest {
+    required int32 fileId = 1;
+}
+message ClientInfo {
+    required int32 ip = 1;
+    required int32 port = 2;
+}
+message SourcesResponse {
+    required int32 size = 1;
+    repeated ClientInfo clients = 2;
+}
+
+message UpdateRequest {
+    required int32 port = 1;
+    required int32 count = 2;
+    repeated int32 fileIds = 3;
+}
+message UpdateResponse {
+    // status — True, если информация успешно обновлена
+    required bool status = 1;
+}

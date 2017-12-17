@@ -1,0 +1,8 @@
+syntax = 'proto2';
+option java_package = "ru.spbau.mit.proto";
+
+message FileInfo {
+    required int32 id = 1;
+    required string name = 2;
+    required int64 size = 3;
+}

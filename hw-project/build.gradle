@@ -3,6 +3,19 @@ version '1.0-SNAPSHOT'
 
 apply plugin: 'java'
 
+apply plugin: 'checkstyle'
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.3'
+    }
+}
+
+apply plugin: 'com.google.protobuf'
+
 sourceCompatibility = 1.8
 
 repositories {
@@ -11,4 +24,53 @@ repositories {
 
 dependencies {
     testCompile group: 'junit', name: 'junit', version: '4.12'
+    // https://mvnrepository.com/artifact/commons-cli/commons-cli
+    compile group: 'commons-cli', name: 'commons-cli', version: '1.4'
+
+    // https://mvnrepository.com/artifact/commons-io/commons-io
+    compile group: 'commons-io', name: 'commons-io', version: '2.6'
+
+    // https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-core
+    compile group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.9.1'
+
+    //    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.3'
+    // https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java
+    compile group: 'com.google.protobuf', name: 'protobuf-java', version: '3.5.0'
+}
+
+// task copyTestResources(type: Copy) {
+//    from "${projectDir}/src"
+//    from "${projectDir}/test"
+//    into "${buildDir}/"
+//}
+
+//processTestResources.dependsOn copyTestResources
+
+sourceSets {
+    main {
+        proto {
+            // In addition to the default 'src/main/proto'
+            // srcDir 'src/main/protobuf'
+            // srcDir 'src/main/protocolbuffers'
+            srcDir 'src/main/proto'
+
+            // In addition to the default '**/*.proto' (use with caution).
+            // Using an extension other than 'proto' is NOT recommended,
+            // because when proto files are published along with class files, we can
+            // only tell the type of a file from its extension.
+            include '**/*.protodevel'
+        }
+        java {
+            srcDir 'src/main/java'
+        }
+    }
+    test {
+        proto {
+            // In addition to the default 'src/test/proto'
+//            srcDir 'src/test/protocolbuffers'
+        }
+        java {
+            srcDir 'src/test/java'
+        }
+    }
 }
