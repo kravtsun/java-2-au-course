@@ -15,7 +15,7 @@ public class ClientTest {
         while (true) {
             try {
                 tracker = new Tracker(getTrackerAddress());
-            } catch (BindException ignored){
+            } catch (BindException ignored) {
                 Thread.sleep(BIND_TIMEOUT);
                 continue;
             }

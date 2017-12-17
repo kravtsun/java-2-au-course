@@ -5,23 +5,6 @@ import java.util.List;
 
 interface AbstractTracker {
     /**
-     * Хранит мета-информацию о раздаваемых файлах:
-
-     идентификатор
-     активные клиенты (недавно был update), у которых есть этот файл целиком или некоторые его части
-     Порт сервера: 8081
-
-     Запросы:
-
-     list — список раздаваемых файлов
-     upload — публикация нового файла
-     sources — список клиентов, владеющих определенным файлов целиком или некоторыми его частями
-     update — загрузка клиентом данных о раздаваемых файлах
-
-     В предложенной реализации предполагается, что торрент-трекер один на всё приложение.
-     */
-
-    /**
      * Формат запроса:
      <1: Byte>
      * Формат ответа:
@@ -30,7 +13,7 @@ interface AbstractTracker {
      id — идентификатор файла
      name — название файла
      size — размер файла
-     * @return
+     * @return list of fileProxies currently available.
      */
     List<FileProxy> list();
 
@@ -49,8 +32,6 @@ interface AbstractTracker {
      */
     // loop request from tracker to itself.
     int upload(String filename, long size);
-//        return upload(getAddress(), filename, size);
-//    }
 
     int upload(InetSocketAddress address, String filename, long size);
 

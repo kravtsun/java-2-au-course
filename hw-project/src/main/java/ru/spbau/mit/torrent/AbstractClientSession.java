@@ -9,7 +9,6 @@ import java.nio.channels.AsynchronousSocketChannel;
 
 import static ru.spbau.mit.torrent.NIOAsyncProcedures.readInt;
 import static ru.spbau.mit.torrent.Utils.*;
-import static ru.spbau.mit.torrent.Utils.COMMAND_GET;
 
 public abstract class AbstractClientSession implements Runnable, Closeable {
     private static final Logger LOGGER = LogManager.getLogger("clientSession");

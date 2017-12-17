@@ -28,7 +28,7 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
         super(listeningAddress);
         initEmpty();
         try {
-            readConfig(this.configFilename);
+            readConfig(configFilename);
         } catch (IOException e) {
             LOGGER.error("Failed to read config file: " + this.configFilename);
         }
@@ -38,7 +38,7 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
         this(listeningAddress, null);
     }
 
-    private synchronized void initEmpty() {
+    private void initEmpty() {
         fileProxies = new ArrayList<>();
         fileSeeds = new HashMap<>();
     }
@@ -223,6 +223,7 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
 
     private class TrackerSession extends AbstractTrackerSession {
         private InetSocketAddress address;
+        private long lastUpdated;
 
         TrackerSession(AsynchronousSocketChannel channel) throws Exception {
             super(channel);
@@ -231,10 +232,29 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
                 throw new TrackerException("update expected");
             }
             proceedUpdate();
+            new Thread(() -> {
+                while (channel.isOpen()) {
+                    try {
+                        synchronized (this) {
+                            if (System.currentTimeMillis() - lastUpdated > UPDATE_TIMEOUT_LIMIT) {
+                                channel.close();
+                                break;
+                            }
+                            wait(UPDATE_TIMEOUT);
+                        }
+                    } catch (InterruptedException e) {
+                        LOGGER.warn("InterruptedException for update checker: " + e);
+                        break;
+                    } catch (IOException e) {
+                        LOGGER.warn("Error while trying to close channel: " + e);
+                        break;
+                    }
+                }
+            }).start();
         }
 
         @Override
-        void proceedList() throws Exception {
+        synchronized void proceedList() throws Exception {
             LOGGER.info("Proceeding: " + COMMAND_LIST);
             List<FileProxy> files = list();
             // TODO protobuf
@@ -245,7 +265,7 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
         }
 
         @Override
-        void proceedUpload() throws Exception {
+        synchronized void proceedUpload() throws Exception {
             String filename = readString(getChannel());
             long size = readLong(getChannel());
             int fileId = upload(address, filename, size);
@@ -253,7 +273,7 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
         }
 
         @Override
-        void proceedUpdate() throws Exception {
+        synchronized void proceedUpdate() throws Exception {
             LOGGER.info("Proceeding: " + COMMAND_UPDATE);
             // TODO protobuf
             address = readAddress(getChannel());
@@ -263,11 +283,15 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
                 fileParts[i] = readInt(getChannel());
             }
             boolean updateStatus = update(address, fileParts);
+
             writeInt(getChannel(), updateStatus ? 1 : 0);
+            if (updateStatus) {
+               lastUpdated = System.currentTimeMillis();
+            }
         }
 
         @Override
-        void proceedSources() throws Exception {
+        synchronized void proceedSources() throws Exception {
             LOGGER.info("Proceeding: " + COMMAND_SOURCES);
             int fileId = readInt(getChannel());
             List<InetSocketAddress> seeds = sources(fileId);

@@ -10,6 +10,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.*;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.AsynchronousSocketChannel;
@@ -267,10 +268,6 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
             MappedByteBuffer buffer = file.getChannel().map(FileChannel.MapMode.READ_WRITE, start, finish);
             readUntil(buffer, in);
             parts.add(partId);
-            if (parts.contains(partId)) {
-                logger.warn("Part " + partId + " is already downloaded for fileId: " + fileId);
-                return;
-            }
         }
     }
 
@@ -353,6 +350,25 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
             if (connectionResult != null) {
                 throw new ClientException("Error while getting trackerConnectionFuture: connectionResult != null");
             }
+            new Thread(() -> {
+                while (trackerChannel.isOpen()) {
+                    while (!Thread.interrupted()) {
+                        try {
+                            synchronized (trackerMonitor) {
+                                trackerMonitor.wait(UPDATE_TIMEOUT);
+                                boolean updateStatus = executeUpdate();
+                                if (!updateStatus) {
+                                    logger.warn("update failed");
+                                }
+                            }
+                        } catch (BufferUnderflowException e) {
+                            logger.warn("trackerChannel seems to be closed: " + e);
+                        } catch (Exception e) {
+                            logger.error("update failed with error: " + e);
+                        }
+                    }
+                }
+            }).start();
         }
         logger.info("connected to tracker: " + trackerAddress);
     }
@@ -368,7 +384,7 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
     }
 
     private class ClientSession extends AbstractClientSession {
-        ClientSession(AsynchronousSocketChannel channel) throws Exception {
+        ClientSession(AsynchronousSocketChannel channel) {
             super(channel);
         }
 

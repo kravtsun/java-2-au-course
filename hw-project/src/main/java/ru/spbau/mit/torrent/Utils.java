@@ -7,6 +7,8 @@ import java.net.InetSocketAddress;
 import java.util.List;
 
 public final class Utils {
+    static final int UPDATE_TIMEOUT = 4 * 60 * 1000;
+    static final int UPDATE_TIMEOUT_LIMIT = 5 * 60 * 1000;
     static final long FILE_PART_SIZE = 10 * 1024 * 1024;
     static final String COMMAND_EXIT = "exit";
     static final String COMMAND_LIST = "list";

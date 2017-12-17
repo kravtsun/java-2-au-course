@@ -33,7 +33,7 @@ public abstract class AbstractTrackerSession implements Closeable, Runnable {
     public void run() {
         while (channel.isOpen()) {
             try {
-                int requestType = 0;
+                int requestType;
                 try {
                     requestType = readInt(channel);
                 } catch (BufferUnderflowException e) {

@@ -111,7 +111,8 @@ public class TrackerTest {
     private void uploadFile(File file) throws Exception {
         final int fileHitCount = 3;
         while (true) {
-            try (Client client = new Client(getClientAddress(fileIdBase / fileHitCount), tracker.getAddress(), null)) {
+            InetSocketAddress currentClientAddress = getClientAddress(fileIdBase / fileHitCount);
+            try (Client client = new Client(currentClientAddress, tracker.getAddress(), null)) {
                 for (int i = 0; i < fileHitCount; i++) {
                     int fileId = tracker.upload(client.getAddress(), file.toString(), file.length());
                     int expectedId = i + fileIdBase;
