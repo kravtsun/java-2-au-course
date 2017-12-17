@@ -3,7 +3,7 @@ package ru.spbau.mit.torrent;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class FileProxy {
-    private static final AtomicInteger fileId = new AtomicInteger(0);
+    private static final AtomicInteger FILE_ID = new AtomicInteger(0);
     private final int id;
     private final String name;
     private final long size;
@@ -15,7 +15,7 @@ public class FileProxy {
     }
 
     FileProxy(String name, long size) {
-        this(fileId.getAndIncrement(), name, size);
+        this(FILE_ID.getAndIncrement(), name, size);
     }
 
     public int getId() {

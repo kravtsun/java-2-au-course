@@ -2,13 +2,12 @@ package ru.spbau.mit.torrent;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.logging.log4j.Logger;
-import org.omg.SendingContext.RunTime;
 
 import java.net.InetSocketAddress;
 import java.util.List;
 
-public class Utils {
-    static final long FILE_PART_SIZE = 10*1024*1024;
+public final class Utils {
+    static final long FILE_PART_SIZE = 10 * 1024 * 1024;
     static final String COMMAND_EXIT = "exit";
     static final String COMMAND_LIST = "list";
     static final String COMMAND_SOURCES = "sources";
@@ -17,7 +16,18 @@ public class Utils {
     static final String COMMAND_GET = "get";
     static final String COMMAND_STAT = "stat";
 
-    static InetSocketAddress addressFromCommandLine(CommandLine commandLine, String hostParameter, String portParameter) {
+    static final int CODE_LIST = 1;
+    static final int CODE_UPLOAD = 2;
+    static final int CODE_SOURCES = 3;
+    static final int CODE_UPDATE = 4;
+
+    static final int CODE_STAT = 1;
+    static final int CODE_GET = 2;
+
+    private Utils() {}
+
+    static InetSocketAddress addressFromCommandLine(
+            CommandLine commandLine, String hostParameter, String portParameter) {
         String portString = commandLine.getOptionValue(portParameter);
         int portNumber = Integer.parseInt(portString);
         String hostName = commandLine.getOptionValue(hostParameter, "localhost");
@@ -50,11 +60,11 @@ public class Utils {
         return result;
     }
 
-    static byte[] IPFromInt(int integerIP) {
+    static byte[] iPFromInt(int integerIP) {
         byte[] bytes = new byte[4];
 
         for (int i = 0; i < 4; ++i) {
-            bytes[3-i] = (byte) (integerIP & 0xFF);
+            bytes[3 - i] = (byte) (integerIP & 0xFF);
         }
         assert integerIP == 0;
         return bytes;

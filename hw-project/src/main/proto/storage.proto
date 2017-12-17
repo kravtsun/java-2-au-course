@@ -1,9 +1,0 @@
-syntax = 'proto2';
-option java_package = "ru.spbau.mit.proto";
-
-import "common.proto";
-
-message FileStorage {
-    required FileInfo info = 1;
-    repeated int32 parts = 2;
-}

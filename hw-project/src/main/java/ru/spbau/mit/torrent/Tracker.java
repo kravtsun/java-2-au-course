@@ -1,6 +1,5 @@
 package ru.spbau.mit.torrent;
 
-import com.sun.xml.internal.ws.policy.privateutil.PolicyUtils;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -8,37 +7,25 @@ import org.apache.commons.cli.Options;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.channels.*;
 import java.util.*;
-import java.util.concurrent.*;
 
 import static ru.spbau.mit.torrent.NIOAsyncProcedures.*;
 import static ru.spbau.mit.torrent.Utils.*;
 
-public class Tracker extends AbstractTracker implements AutoCloseable, Configurable {
+public class Tracker extends Server implements AbstractTracker, AutoCloseable, Configurable {
     private static final Logger LOGGER = LogManager.getLogger("trackerApp");
-    private final InetSocketAddress listeningAddress;
-    private final AsynchronousChannelGroup group;
     private final String configFilename;
-    private AsynchronousServerSocketChannel servingChannel;
-    private List<AsynchronousSocketChannel> channels = new ArrayList<>();
 
     private List<FileProxy> fileProxies = new ArrayList<>();
     private Map<Integer, Set<InetSocketAddress>> fileSeeds = new HashMap<>();
     private final Object monitor = new Object();
 
     public Tracker(InetSocketAddress listeningAddress, String configFilename) throws IOException {
-        this.listeningAddress = listeningAddress;
-
-        ExecutorService trackerPool = Executors.newCachedThreadPool();
-        group = AsynchronousChannelGroup.withThreadPool(trackerPool);
-        open();
-
+        super(listeningAddress);
         this.configFilename = configFilename;
         try {
             readConfig(this.configFilename);
@@ -49,7 +36,7 @@ public class Tracker extends AbstractTracker implements AutoCloseable, Configura
 
     @Override
     public synchronized void readConfig(String configFilename) throws IOException {
-        try(RandomAccessFile file = new RandomAccessFile(configFilename, "r")) {
+        try (RandomAccessFile file = new RandomAccessFile(configFilename, "r")) {
             FileChannel fileChannel = file.getChannel();
             int count;
             count = NIOProcedures.readInt(fileChannel);
@@ -71,7 +58,7 @@ public class Tracker extends AbstractTracker implements AutoCloseable, Configura
 
     @Override
     public synchronized void writeConfig(String configFilename) throws IOException {
-        try(RandomAccessFile file = new RandomAccessFile(configFilename, "w")) {
+        try (RandomAccessFile file = new RandomAccessFile(configFilename, "rw")) {
             FileChannel fileChannel = file.getChannel();
             NIOProcedures.writeInt(fileChannel, fileProxies.size());
             for (FileProxy fileProxy : fileProxies) {
@@ -140,54 +127,16 @@ public class Tracker extends AbstractTracker implements AutoCloseable, Configura
             }
         } catch (IOException e) {
             LOGGER.error("Tracker error: " + e);
-        } catch (InterruptedException e) {
-            LOGGER.error("Tracker's exiting loop interrupted: " + e);
         }
     }
 
     @Override
-    public synchronized void close() throws IOException, InterruptedException {
-        for (AsynchronousSocketChannel channel: channels) {
-            channel.close();
-        }
+    public synchronized void close() throws IOException {
+        super.close();
         synchronized (monitor) {
             writeConfig(configFilename);
         }
-        group.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
     }
-
-
-    private void open() throws IOException {
-        servingChannel = AsynchronousServerSocketChannel.open(group);
-        servingChannel.bind(listeningAddress);
-        LOGGER.info("Tracker bound to address: " + listeningAddress);
-
-        servingChannel.accept(null,
-                new CompletionHandler<AsynchronousSocketChannel, Object>() {
-                    public void completed(AsynchronousSocketChannel channel, Object attachment) {
-                        System.out.println("Accepted a connection");
-
-                        // accept the next connection
-                        servingChannel.accept(null, this);
-
-                        synchronized (this) {
-                            channels.add(channel);
-                        }
-
-                        try (TrackerSession session = new TrackerSession(channel)) {
-                            session.run();
-                        } catch (IOException e) {
-                            LOGGER.error("TrackerSession error: " + e);
-                            e.printStackTrace();
-                        }
-                    }
-
-                    public void failed(Throwable throwable, Object att) {
-                        System.out.println("Failed to accept connection: " + throwable);
-                    }
-                });
-    }
-
 
 
     @Override
@@ -228,98 +177,70 @@ public class Tracker extends AbstractTracker implements AutoCloseable, Configura
     }
 
     @Override
-    public InetSocketAddress getAddress() {
-        return listeningAddress;
+    void serve(AsynchronousSocketChannel channel) {
+        try (TrackerSession session = new TrackerSession(channel)) {
+            session.run();
+        } catch (Exception e) {
+            LOGGER.error("TrackerSession error: " + e);
+            e.printStackTrace();
+        }
     }
 
-    private class TrackerSession implements Closeable, Runnable {
-        private final AsynchronousSocketChannel channel;
+    private class TrackerSession extends AbstractTrackerSession {
         private InetSocketAddress address;
 
-        TrackerSession(AsynchronousSocketChannel channel) throws IOException {
-            this.channel = channel;
+        TrackerSession(AsynchronousSocketChannel channel) throws Exception {
+            super(channel);
+            int opCode = readInt(channel);
+            if (opCode != CODE_UPDATE) {
+                throw new TrackerException("update expected");
+            }
             proceedUpdate();
         }
 
         @Override
-        public void close() throws IOException {
-            try {
-                channel.close();
-            } catch (IOException e) {
-                LOGGER.error("Error while trying to close socket from client: " + e);
-                throw e;
+        void proceedList() throws Exception {
+            LOGGER.info("Proceeding: " + COMMAND_LIST);
+            List<FileProxy> files = list();
+            // TODO protobuf
+            writeInt(getChannel(), files.size());
+            for (FileProxy file: files) {
+                writeProxy(getChannel(), file);
             }
         }
 
         @Override
-        public void run() {
-            while (channel.isOpen()) {
-                try {
-                    int requestType = readInt(channel);
-                    String filename;
-                    List<FileProxy> files;
-                    List<InetSocketAddress> seeds;
-                    int fileId;
-                    long size;
-                    switch (requestType) {
-                        case 1:
-                            // list
-                            LOGGER.info("Proceeding: " + COMMAND_LIST);
-                            proceedList();
-                            break;
-                        case 2:
-                            // upload
-                            LOGGER.info("Proceeding: " + COMMAND_UPLOAD);
-                            filename = readString(channel);
-                            size = readLong(channel);
-                            fileId = upload(address, filename, size);
-                            writeInt(channel, fileId);
-                            break;
-                        case 3:
-                            // sources
-                            LOGGER.info("Proceeding: " + COMMAND_SOURCES);
-                            fileId = readInt(channel);
-                            seeds = sources(fileId);
-                            // TODO protobuf
-                            writeInt(channel, seeds.size());
-                            for (InetSocketAddress address: seeds) {
-                                writeAddress(channel, address);
-                            }
-                            break;
-                        case 4:
-                            proceedUpdate();
-                            break;
-                        default:
-                            throw new TrackerException("Unknown type of request; " + requestType);
-
-                    }
-                } catch (IOException e) {
-                    LOGGER.error("Error while proceeding request: " + e);
-                }
-            }
+        void proceedUpload() throws Exception {
+            String filename = readString(getChannel());
+            long size = readLong(getChannel());
+            int fileId = upload(address, filename, size);
+            writeInt(getChannel(), fileId);
         }
 
-        private void proceedList() throws IOException {
-            List<FileProxy> files = list();
-            // TODO protobuf
-            writeInt(channel, files.size());
-            for (FileProxy file: files) {
-                writeProxy(channel, file);
-            }
-        }
-
-        private void proceedUpdate() throws IOException {
-            // update
+        @Override
+        void proceedUpdate() throws Exception {
             LOGGER.info("Proceeding: " + COMMAND_UPDATE);
             // TODO protobuf
-            int count = readInt(channel);
-            address = readAddress(channel);
+            int count = readInt(getChannel());
+            address = readAddress(getChannel());
             int[] fileParts = new int[count];
             for (int i = 0; i < count; i++) {
-                fileParts[i] = readInt(channel);
+                fileParts[i] = readInt(getChannel());
             }
             boolean updateStatus = update(address, fileParts);
-            writeInt(channel, updateStatus ? 1 : 0);
+            writeInt(getChannel(), updateStatus ? 1 : 0);
+        }
+
+        @Override
+        void proceedSources() throws Exception {
+            LOGGER.info("Proceeding: " + COMMAND_SOURCES);
+            int fileId = readInt(getChannel());
+            List<InetSocketAddress> seeds = sources(fileId);
+            // TODO protobuf
+            writeInt(getChannel(), seeds.size());
+            for (InetSocketAddress address: seeds) {
+                writeAddress(getChannel(), address);
+            }
         }
     }
 }

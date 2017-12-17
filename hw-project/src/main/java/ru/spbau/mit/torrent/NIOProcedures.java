@@ -4,11 +4,10 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 
-import static ru.spbau.mit.torrent.Utils.IPFromInt;
+import static ru.spbau.mit.torrent.Utils.iPFromInt;
 import static ru.spbau.mit.torrent.Utils.intFromIP;
 
 final class NIOProcedures {
@@ -70,7 +69,7 @@ final class NIOProcedures {
     }
 
     static InetSocketAddress readAddress(ReadableByteChannel in) throws IOException {
-        byte[] ipBytes = IPFromInt(readInt(in));
+        byte[] ipBytes = iPFromInt(readInt(in));
         int port = readInt(in);
         return new InetSocketAddress(InetAddress.getByAddress(ipBytes), port);
     }

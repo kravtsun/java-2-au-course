@@ -1,12 +1,9 @@
 package ru.spbau.mit.torrent;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import java.net.InetSocketAddress;
 import java.util.List;
 
-public abstract class AbstractTracker {
+interface AbstractTracker {
     /**
      * Хранит мета-информацию о раздаваемых файлах:
 
@@ -24,8 +21,6 @@ public abstract class AbstractTracker {
      В предложенной реализации предполагается, что торрент-трекер один на всё приложение.
      */
 
-    private static final Logger LOGGER = LogManager.getLogger("server");
-
     /**
      * Формат запроса:
      <1: Byte>
@@ -37,7 +32,7 @@ public abstract class AbstractTracker {
      size — размер файла
      * @return
      */
-    public abstract List<FileProxy> list();
+    List<FileProxy> list();
 
     /**
      * Формат запроса:
@@ -52,12 +47,12 @@ public abstract class AbstractTracker {
      * @param size
      * @return
      */
-    public int upload(String filename, long size) {
+    default int upload(String filename, long size) {
         // loop request from tracker to tracker.
         return upload(getAddress(), filename, size);
     }
 
-    public abstract int upload(InetSocketAddress address, String filename, long size);
+    int upload(InetSocketAddress address, String filename, long size);
 
     /**
      * Формат запроса:
@@ -72,7 +67,7 @@ public abstract class AbstractTracker {
      * @param fileId
      * @return
      */
-    public abstract List<InetSocketAddress> sources(int fileId);
+    List<InetSocketAddress> sources(int fileId);
 
     /**
      * Формат запроса:
@@ -93,7 +88,7 @@ public abstract class AbstractTracker {
     // Нужно ли этот запрос клиенту исполнять каждый раз, когда он получил новую часть какого-то файла?
     // наверно логичнее выполнять его только после того как получена первая (какая-то часть),
     // и далее каждые 5 минут.
-    public abstract boolean update(InetSocketAddress clientAddress, int[] fileIds);
+    boolean update(InetSocketAddress clientAddress, int[] fileIds);
 
-    public abstract InetSocketAddress getAddress();
+    InetSocketAddress getAddress();
 }
