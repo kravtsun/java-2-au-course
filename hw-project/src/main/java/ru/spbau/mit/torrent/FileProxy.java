@@ -29,4 +29,9 @@ public class FileProxy {
     public long getSize() {
         return size;
     }
+
+    @Override
+    public String toString() {
+        return id + "\"" + name + "\": (" + size + " bytes)";
+    }
 }

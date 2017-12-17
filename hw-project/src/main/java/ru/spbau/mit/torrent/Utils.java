@@ -28,7 +28,7 @@ public final class Utils {
 
     static InetSocketAddress addressFromCommandLine(
             CommandLine commandLine, String hostParameter, String portParameter) {
-        String portString = commandLine.getOptionValue(portParameter);
+        String portString = commandLine.getOptionValue(portParameter, "8081");
         int portNumber = Integer.parseInt(portString);
         String hostName = commandLine.getOptionValue(hostParameter, "localhost");
         return new InetSocketAddress(hostName, portNumber);
@@ -65,6 +65,7 @@ public final class Utils {
 
         for (int i = 0; i < 4; ++i) {
             bytes[3 - i] = (byte) (integerIP & 0xFF);
+            integerIP >>= 8;
         }
         assert integerIP == 0;
         return bytes;

@@ -24,10 +24,9 @@ import static ru.spbau.mit.torrent.Utils.*;
 public class Client extends Server implements AbstractClient, Configurable, Closeable {
     private static final Logger LOGGER = LogManager.getLogger("clientApp");
     private final Logger logger;
-    private final InetSocketAddress trackerAddress;
     private AsynchronousSocketChannel trackerChannel;
 
-    // contract: trackerMonitor's synchronized comes before synchronized(this)
+    // contract: trackerMonitor's synchronized comes (or inside) synchronized(this).
     private final Object trackerMonitor = new Object();
 
     private String configFilename;
@@ -36,6 +35,11 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
 
     @Override
     public synchronized void readConfig(String configFilename) throws IOException {
+        this.configFilename = configFilename;
+        if (configFilename == null) {
+            LOGGER.warn("No configuration file was specified. Default settings...");
+            return;
+        }
         try (RandomAccessFile file = new RandomAccessFile(configFilename, "r")) {
             FileChannel fileChannel = file.getChannel();
             int count;
@@ -61,6 +65,11 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
 
     @Override
     public synchronized void writeConfig(String configFilename) throws IOException {
+        this.configFilename = configFilename;
+        if (configFilename == null) {
+            LOGGER.warn("No configuration file specified, no settings saved.");
+            return;
+        }
         try (RandomAccessFile file = new RandomAccessFile(configFilename, "rw")) {
             FileChannel fileChannel = file.getChannel();
             NIOProcedures.writeInt(fileChannel, fileParts.size());
@@ -85,14 +94,13 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
             throws Exception {
         super(listeningAddress);
         logger = LogManager.getLogger("client:" + listeningAddress.getPort());
-        this.trackerAddress = trackerAddress;
         this.configFilename = configFilename;
         try {
             readConfig(this.configFilename);
         } catch (IOException e) {
             logger.error("Failed to read config file: " + this.configFilename);
         }
-        connectToTracker();
+        connectToTracker(trackerAddress);
         if (!executeUpdate()) {
             throw new ClientException("Failed to execute initial update");
         }
@@ -211,18 +219,22 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
 
     @Override
     public List<Integer> executeStat(AsynchronousSocketChannel in, int fileId) throws Exception {
-        writeInt(in, CODE_STAT);
-        writeInt(in, fileId);
-        int count = readInt(in);
-        java.util.List<java.lang.Integer> parts = new ArrayList<>();
-        for (int i = 0; i < count; i++) {
-            parts.add(readInt(in));
+        logger.info("executeStat");
+        synchronized (this) {
+            writeInt(in, CODE_STAT);
+            writeInt(in, fileId);
+            int count = readInt(in);
+            java.util.List<java.lang.Integer> parts = new ArrayList<>();
+            for (int i = 0; i < count; i++) {
+                parts.add(readInt(in));
+            }
+            return parts;
         }
-        return parts;
     }
 
     @Override
     public synchronized void executeGet(AsynchronousSocketChannel in, int fileId, int partId) throws Exception {
+        logger.info("executeGet");
         List<Integer> parts;
         FileProxy fileProxy;
         synchronized (this) {
@@ -264,6 +276,7 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
 
     @Override
     public List<FileProxy> executeList() throws Exception {
+        logger.info("executeList");
         List<FileProxy> fileProxies = new ArrayList<>();
         synchronized (trackerMonitor) {
             writeInt(trackerChannel, CODE_LIST);
@@ -281,6 +294,7 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
 
     @Override
     public int executeUpload(String filename) throws Exception {
+        logger.info("executeUpload");
         writeInt(trackerChannel, CODE_UPLOAD);
         writeString(trackerChannel, filename);
         File file = new File(filename);
@@ -296,6 +310,7 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
 
     @Override
     public List<InetSocketAddress> executeSources(int fileId) throws Exception {
+        logger.info("executeSources");
         List<InetSocketAddress> addresses = new ArrayList<>();
         synchronized (trackerMonitor) {
             writeInt(trackerChannel, CODE_SOURCES);
@@ -309,6 +324,7 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
 
     @Override
     public boolean executeUpdate() throws Exception {
+        logger.info("executeUpdate");
         synchronized (trackerMonitor) {
             writeInt(trackerChannel, CODE_UPDATE);
             writeAddress(trackerChannel, getAddress());
@@ -329,7 +345,7 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
         trackerChannel.close();
     }
 
-    private void connectToTracker() throws Exception {
+    private void connectToTracker(InetSocketAddress trackerAddress) throws Exception {
         synchronized (trackerMonitor) {
             trackerChannel = AsynchronousSocketChannel.open();
             Future trackerConnectionFuture = trackerChannel.connect(trackerAddress);
@@ -352,11 +368,11 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
     }
 
     private class ClientSession extends AbstractClientSession {
-
         ClientSession(AsynchronousSocketChannel channel) throws Exception {
             super(channel);
         }
 
+        @Override
         public void proceedGet(int fileId, int partId) throws Exception {
             FileProxy fileProxy;
             synchronized (this) {
@@ -381,6 +397,7 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
             }
         }
 
+        @Override
         public void proceedStat(int fileId) throws Exception {
             List<Integer> parts = new ArrayList<>(fileParts.get(fileId));
             writeInt(getChannel(), parts.size());

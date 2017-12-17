@@ -22,11 +22,11 @@ public abstract class Server implements Closeable {
     Server(InetSocketAddress listeningAddress) throws IOException {
         this.listeningAddress = listeningAddress;
         ExecutorService trackerPool = Executors.newCachedThreadPool();
-        group = AsynchronousChannelGroup.withThreadPool(trackerPool);
+        group = AsynchronousChannelGroup.withCachedThreadPool(trackerPool, 4);
         open();
     }
 
-    public InetSocketAddress getAddress() {
+    InetSocketAddress getAddress() {
         return listeningAddress;
     }
 

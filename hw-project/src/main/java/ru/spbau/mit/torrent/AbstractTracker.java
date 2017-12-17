@@ -47,10 +47,10 @@ interface AbstractTracker {
      * @param size
      * @return
      */
-    default int upload(String filename, long size) {
-        // loop request from tracker to tracker.
-        return upload(getAddress(), filename, size);
-    }
+    // loop request from tracker to itself.
+    int upload(String filename, long size);
+//        return upload(getAddress(), filename, size);
+//    }
 
     int upload(InetSocketAddress address, String filename, long size);
 
@@ -89,6 +89,4 @@ interface AbstractTracker {
     // наверно логичнее выполнять его только после того как получена первая (какая-то часть),
     // и далее каждые 5 минут.
     boolean update(InetSocketAddress clientAddress, int[] fileIds);
-
-    InetSocketAddress getAddress();
 }

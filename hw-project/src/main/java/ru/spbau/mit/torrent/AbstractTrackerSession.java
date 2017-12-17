@@ -5,6 +5,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.nio.BufferUnderflowException;
 import java.nio.channels.AsynchronousSocketChannel;
 
 import static ru.spbau.mit.torrent.NIOAsyncProcedures.readInt;
@@ -32,7 +33,13 @@ public abstract class AbstractTrackerSession implements Closeable, Runnable {
     public void run() {
         while (channel.isOpen()) {
             try {
-                int requestType = readInt(channel);
+                int requestType = 0;
+                try {
+                    requestType = readInt(channel);
+                } catch (BufferUnderflowException e) {
+                    LOGGER.warn("Channel seems to be closed.");
+                    return;
+                }
                 switch (requestType) {
                     case CODE_LIST:
                         proceedList();
@@ -41,7 +48,6 @@ public abstract class AbstractTrackerSession implements Closeable, Runnable {
                         proceedUpload();
                         break;
                     case CODE_SOURCES:
-                        // sources
                         proceedSources();
                         break;
                     case CODE_UPDATE:
