@@ -52,11 +52,12 @@ public abstract class AbstractTracker {
      * @param size
      * @return
      */
-    public abstract int upload(String filename, long size) throws Exception;
-//        FileProxy file = new FileProxy(filename, size);
-//        throw new Exception("Not implemented");
-//        return file.getId();
-//    }
+    public int upload(String filename, long size) {
+        // loop request from tracker to tracker.
+        return upload(getAddress(), filename, size);
+    }
+
+    public abstract int upload(InetSocketAddress address, String filename, long size);
 
     /**
      * Формат запроса:
@@ -83,7 +84,7 @@ public abstract class AbstractTracker {
      * Формат ответа:
      <status: Boolean>,
      status — True, если информация успешно обновлена
-     * @param clientPort
+     * @param clientAddress
      * @param fileIds
      * @return
      */
@@ -92,5 +93,7 @@ public abstract class AbstractTracker {
     // Нужно ли этот запрос клиенту исполнять каждый раз, когда он получил новую часть какого-то файла?
     // наверно логичнее выполнять его только после того как получена первая (какая-то часть),
     // и далее каждые 5 минут.
-    public abstract boolean update(int clientPort, List<Integer> fileIds);
+    public abstract boolean update(InetSocketAddress clientAddress, int[] fileIds);
+
+    public abstract InetSocketAddress getAddress();
 }

@@ -8,10 +8,14 @@ public class FileProxy {
     private final String name;
     private final long size;
 
-    FileProxy(String name, long size) {
-        id = fileId.getAndIncrement();
+    FileProxy(int id, String name, long size) {
+        this.id = id;
         this.name = name;
         this.size = size;
+    }
+
+    FileProxy(String name, long size) {
+        this(fileId.getAndIncrement(), name, size);
     }
 
     public int getId() {

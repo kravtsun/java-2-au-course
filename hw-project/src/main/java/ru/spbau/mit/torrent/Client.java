@@ -11,34 +11,88 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.AsynchronousServerSocketChannel;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.AsynchronousSocketChannel;
-import java.nio.channels.CompletionHandler;
-import java.util.List;
-import java.util.Scanner;
+import java.nio.channels.FileChannel;
+import java.util.*;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
-import static ru.spbau.mit.torrent.Utils.addressFromCommandLine;
+import static ru.spbau.mit.torrent.NIOAsyncProcedures.*;
+import static ru.spbau.mit.torrent.Utils.*;
 
-public class Client extends AbstractClient {
+public class Client extends AbstractClient implements Configurable {
     private static final Logger LOGGER = LogManager.getLogger("clientApp");
     private final Logger logger = LogManager.getLogger("client:" + getAddress().getPort());
     private final InetSocketAddress trackerAddress;
-    private String configFilename;
+    private AsynchronousSocketChannel trackerChannel;
 
-    public class ClientException extends RuntimeException {
-        ClientException(String message) {
-            super(message);
+    // contract: trackerMonitor's synchronized comes before synchronized(this)
+    final Object trackerMonitor = new Object();
+
+    private String configFilename;
+    private Map<Integer, List<Integer>> fileParts = new HashMap<>();
+    private Map<Integer, FileProxy> files = new HashMap<>();
+
+    @Override
+    public synchronized void readConfig(String configFilename) throws IOException {
+        try(RandomAccessFile file = new RandomAccessFile(configFilename, "r")) {
+            FileChannel fileChannel = file.getChannel();
+            int count;
+            count = NIOProcedures.readInt(fileChannel);
+            for (int i = 0; i < count; i++) {
+                int fileId = NIOProcedures.readInt(fileChannel);
+                int partsCount = NIOProcedures.readInt(fileChannel);
+                List<Integer> parts = new ArrayList<>();
+                for (int j = 0; j < partsCount; j++) {
+                    parts.add(NIOProcedures.readInt(fileChannel));
+                }
+                fileParts.put(fileId, parts);
+            }
+
+            count = NIOProcedures.readInt(fileChannel);
+            for (int i = 0; i < count; i++) {
+                int fileId = NIOProcedures.readInt(fileChannel);
+                FileProxy fileProxy = NIOProcedures.readProxy(fileChannel);
+                files.put(fileId, fileProxy);
+            }
         }
     }
 
-    // TODO boolean isAvailableToServe()
-    public Client(InetSocketAddress listeningAddress, InetSocketAddress trackerAddress, String storageFilename) throws IOException {
+    @Override
+    public synchronized void writeConfig(String configFilename) throws IOException {
+        try(RandomAccessFile file = new RandomAccessFile(configFilename, "w")) {
+            FileChannel fileChannel = file.getChannel();
+            NIOProcedures.writeInt(fileChannel, fileParts.size());
+            for (Integer fileId : fileParts.keySet()) {
+                NIOProcedures.writeInt(fileChannel, fileId);
+                List<Integer> parts = fileParts.get(fileId);
+                NIOProcedures.writeInt(fileChannel, parts.size());
+                for (Integer part : parts) {
+                    NIOProcedures.writeInt(fileChannel, part);
+                }
+            }
+
+            NIOProcedures.writeInt(fileChannel, files.size());
+            for (Map.Entry<Integer, FileProxy> e : files.entrySet()) {
+                NIOProcedures.writeInt(fileChannel, e.getKey());
+                NIOProcedures.writeProxy(fileChannel, e.getValue());
+            }
+        }
+    }
+
+    public Client(InetSocketAddress listeningAddress, InetSocketAddress trackerAddress, String configFilename)
+            throws IOException, ExecutionException, InterruptedException {
         super(listeningAddress);
         this.trackerAddress = trackerAddress;
-        this.configFilename = storageFilename;
-        readConfig();
+        this.configFilename = configFilename;
+        try {
+            readConfig(this.configFilename);
+        } catch (IOException e) {
+            logger.error("Failed to read config file: " + this.configFilename);
+        }
+        connectToTracker();
     }
 
     public static void main(String[] args) {
@@ -54,7 +108,6 @@ public class Client extends AbstractClient {
 
         options.addOption(null, "config", true, "Where to store/load config");
 
-//        Client client;
         InetSocketAddress listeningAddress;
         InetSocketAddress trackerAddress;
         String configFilename;
@@ -67,125 +120,253 @@ public class Client extends AbstractClient {
 
             configFilename = "client_" + listeningAddress.getPort() + ".config";
             configFilename = commandLine.getOptionValue("config", configFilename);
-//            client = new Client(listeningAddress, trackerAddress, configFilename);
         } catch (Exception e) {
             LOGGER.error("Failed to parse: " + e);
             return;
         }
 
-        AsynchronousSocketChannel trackerChannel = null;
-        try {
-            trackerChannel = AsynchronousSocketChannel.open();
-            Future trackerConnectionFuture = trackerChannel.connect(trackerAddress);
-            Object connectionResult = trackerConnectionFuture.get();
-            if (connectionResult != null) {
-                throw new IOException("Error while getting trackerConnectionFuture: connectionResult != null");
+        try (Client client = new Client(listeningAddress, trackerAddress, configFilename)) {
+            final Scanner scanner = new Scanner(System.in);
+            int fileId;
+
+            main_loop:
+            while (true) {
+                String command = scanner.next();
+                AsynchronousSocketChannel otherClientChannel;
+
+                Callable<AsynchronousSocketChannel> getOtherClientChannel = () -> {
+                    LOGGER.info("Other client address: ");
+                    String host = scanner.next();
+                    LOGGER.info("port: ");
+                    int port = scanner.nextInt();
+                    InetSocketAddress otherClientAddress = new InetSocketAddress(InetAddress.getByName(host), port);
+                    AsynchronousSocketChannel channel = AsynchronousSocketChannel.open();
+                    Future connectionFuture = channel.connect(otherClientAddress);
+                    Object connectionResult = connectionFuture.get();
+                    if (connectionResult != null) {
+                        throw new ClientException("Error while getting trackerConnectionFuture: connectionResult != null");
+                    }
+                    LOGGER.info("connected to other client: " + otherClientAddress);
+                    return channel;
+                };
+
+                switch (command) {
+                    case COMMAND_EXIT:
+                        LOGGER.info("Exiting...");
+                        break main_loop;
+                    case COMMAND_LIST:
+                        LOGGER.info("List request");
+                        Utils.infoList(LOGGER, client.executeList());
+                        break;
+                    case COMMAND_SOURCES:
+                        fileId = scanner.nextInt();
+                        LOGGER.info("Sources request for fileId: " + fileId);
+                        Utils.infoSources(LOGGER, client.executeSources(fileId));
+                        break;
+                    case COMMAND_UPLOAD:
+                        String filename = scanner.next();
+                        LOGGER.info("Uploading, filename: " + filename);
+                        fileId = client.executeUpload(filename);
+                        LOGGER.info("Uploaded, fileId: " + fileId);
+                        break;
+                    case COMMAND_GET:
+                        LOGGER.info("Get command: ");
+                        otherClientChannel = getOtherClientChannel.call();
+                        LOGGER.info("fileId: ");
+                        fileId = scanner.nextInt();
+                        LOGGER.info("partId: ");
+                        int partId = scanner.nextInt();
+                        client.proceedGet(otherClientChannel, fileId, partId);
+                        break;
+                    case COMMAND_STAT:
+                        LOGGER.info("Stat command: ");
+                        otherClientChannel = getOtherClientChannel.call();
+                        fileId = scanner.nextInt();
+                        LOGGER.info("fileId: " + fileId);
+                        List<Integer> parts = client.executeStat(otherClientChannel, fileId);
+                        LOGGER.info("Parts received: " + parts.size());
+                        for (Integer part: parts) {
+                            LOGGER.info("#" + part);
+                        }
+                        break;
+                    case COMMAND_UPDATE:
+                        LOGGER.info("Update command");
+                        boolean updateStatus = client.executeUpdate();
+                        LOGGER.info("Update status: " + updateStatus);
+                    default:
+                        LOGGER.error("Unknown command: " + command);
+                        break;
+                }
             }
-            LOGGER.info("connected to tracker: " + trackerAddress);
-//            trackerChannel.connect()
         } catch (Exception e) {
-            LOGGER.error("Error while trying to connect to tracker: ", e);
+            LOGGER.error("Client error: " + e);
             e.printStackTrace();
         }
+    }
 
-        final Scanner scanner = new Scanner(System.in);
+    @Override
+    public List<Integer> executeStat(AsynchronousSocketChannel in, int fileId) throws IOException {
+        writeInt(in, 1);
+        writeInt(in, fileId);
+        int count = readInt(in);
+        java.util.List<java.lang.Integer> parts = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            parts.add(readInt(in));
+        }
+        return parts;
+    }
 
-        while (true) {
-            String message = scanner.nextLine();
-            ByteBuffer buffer = ByteBuffer.wrap(message.getBytes());
-            assert trackerChannel != null;
-//            AsynchronousSocketChannel finalTrackerChannel = trackerChannel;
-//            Future result = trackerChannel.write(buffer, null, new CompletionHandler<Integer, Object>() {
-//                @Override
-//                public void completed(Integer result, Object attachment) {
-//                    while (buffer.hasRemaining()) {
-//                        finalTrackerChannel.write(buffer);
-//                    }
-//                }
-//
-//                @Override
-//                public void failed(Throwable exc, Object attachment) {
-//                    exc.printStackTrace();
-//                    LOGGER.error("Error while sending message: " + exc);
-//                }
-//            });
-            Future result = trackerChannel.write(buffer);
-
-            while (!result.isDone()) {
-                System.out.println("... ");
-            }
-            System.out.println("Sent message: " + message);
-            buffer.clear();
+    @Override
+    public synchronized void executeGet(AsynchronousSocketChannel in, int fileId, int partId) throws IOException {
+        List<Integer> parts;
+        FileProxy fileProxy;
+        synchronized (this) {
+            parts = fileParts.get(fileId);
+            fileProxy = files.get(fileId);
         }
 
-//        final String getRequestPrefix = "get ";
-//        final String listRequestPrefix = "list ";
+        if (parts == null) {
+            if (fileProxy == null) {
+                executeList();
+            }
+            synchronized (this) {
+                fileProxy = files.get(fileId);
+                if (fileProxy == null) {
+                    throw new ClientException("Failed to retrieve file proxy, where to save?");
+                }
+                fileParts.put(fileId, new ArrayList<>());
+                parts = fileParts.get(fileId);
+            }
+        }
 
-//
-//        try (AbstractClient client = new Client()) {
-//            try {
-//                client.connect(hostName, portNumber);
-//            } catch (IOException e) {
-//                LOGGER.error("Failed to establish connection: " + e);
-//                return;
-//            }
-//            String command;
-//            while ((command = scanner.nextLine()) != null) {
-//                if (command.isEmpty()) {
-//                    continue;
-//                }
-//                if (command.length() > getRequestPrefix.length()
-//                        && command.substring(0, getRequestPrefix.length()).equals(getRequestPrefix)) {
-//                    String path = command.substring(getRequestPrefix.length());
-//                    File outputFile = File.createTempFile("get_", ".result");
-//                    client.executeGet(path, outputFile.getPath());
-//                } else if (command.length() > listRequestPrefix.length()
-//                        && command.substring(0, listRequestPrefix.length()).equals(listRequestPrefix)) {
-//                    String path = command.substring(listRequestPrefix.length());
-//                    client.executeList(path);
-//                } else if (command.equals(EchoRequest.EXIT_MESSAGE)) {
-//                    client.executeExit();
-//                    break;
-//                } else {
-//                    client.executeEcho(command);
-//                }
-//            }
-//        } catch (Exception e) {
-//            LOGGER.error(e);
-//        }
+        synchronized (this) {
+            writeInt(in, 2);
+            writeInt(in, fileId);
+            writeInt(in, partId);
+
+            RandomAccessFile file = new RandomAccessFile(fileProxy.getName(), "w");
+            long start = partId * FILE_PART_SIZE;
+            long finish = start + FILE_PART_SIZE;
+            MappedByteBuffer buffer = file.getChannel().map(FileChannel.MapMode.READ_WRITE, start, finish);
+            readUntil(buffer, in);
+            parts.add(partId);
+            if (parts.contains(partId)) {
+                logger.warn("Part " + partId + " is already downloaded for fileId: " + fileId);
+                return;
+            }
+        }
     }
 
     @Override
-    public boolean isUpdated() {
-        return false;
+    public List<FileProxy> executeList() throws IOException {
+        List<FileProxy> fileProxies = new ArrayList<>();
+        synchronized (trackerMonitor) {
+            writeInt(trackerChannel, 1);
+            int count = readInt(trackerChannel);
+            for (int i = 0; i < count; i++) {
+                fileProxies.add(readProxy(trackerChannel));
+            }
+        }
+        synchronized (this) {
+            files = null;
+            fileProxies.forEach((fileProxy -> files.put(fileProxy.getId(), fileProxy)));
+        }
+        return fileProxies;
     }
 
     @Override
-    public void setUpdated() {
-
+    public int executeUpload(String filename) throws IOException {
+        writeInt(trackerChannel, 2);
+        writeString(trackerChannel, filename);
+        File file = new File(filename);
+        long size = file.length();
+        writeLong(trackerChannel, size);
+        int fileId = readInt(trackerChannel);
+        FileProxy fileProxy = new FileProxy(fileId, filename, size);
+        synchronized (this) {
+            files.put(fileId, fileProxy);
+        }
+        return fileId;
     }
 
     @Override
-    public List<Integer> stat(int fileId) {
-        return null;
+    public List<InetSocketAddress> executeSources(int fileId) throws IOException {
+        List<InetSocketAddress> addresses = new ArrayList<>();
+        synchronized (trackerMonitor) {
+            writeInt(trackerChannel, 3);
+            int count = readInt(trackerChannel);
+            for (int i = 0; i < count; i++) {
+                addresses.add(readAddress(trackerChannel));
+            }
+        }
+        return addresses;
     }
 
     @Override
-    public void get(int fileId, int part, OutputStream out) {
+    public void proceedGet(AsynchronousSocketChannel out, int fileId, int partId) throws IOException, ExecutionException, InterruptedException {
+        FileProxy fileProxy;
+        synchronized (this) {
+            fileProxy = files.get(fileId);
+        }
 
+        try (RandomAccessFile file = new RandomAccessFile(fileProxy.getName(), "r")) {
+            long length = file.length();
+            long start = partId * FILE_PART_SIZE;
+            if (start > length) {
+                throw new ClientException("part " + partId + " is not consistent with file length: " + length);
+            }
+            long finish = start + FILE_PART_SIZE;
+            if (finish > length) {
+                finish = length;
+            }
+            ByteBuffer buffer = file.getChannel().map(FileChannel.MapMode.READ_ONLY, start, finish);
+            writeUntil(buffer, out);
+        } catch (Exception e) {
+            LOGGER.error("Failed to proceed get request: " + e);
+            throw e;
+        }
+    }
+
+    @Override
+    public void proceedStat(AsynchronousSocketChannel out, int fileId) throws IOException {
+        List<Integer> parts = new ArrayList<>(fileParts.get(fileId));
+        writeInt(out, parts.size());
+        for (Integer part: parts) {
+            writeInt(out, part);
+        }
+    }
+
+    @Override
+    public boolean executeUpdate() throws IOException {
+        synchronized (trackerMonitor) {
+            writeAddress(trackerChannel, getAddress());
+            synchronized (this) {
+                writeInt(trackerChannel, files.size());
+                for (Integer fileId : files.keySet()) {
+                    writeInt(trackerChannel, fileId);
+                }
+            }
+            int updateStatus = readInt(trackerChannel);
+            return updateStatus != 0;
+        }
     }
 
     @Override
     public void close() throws IOException {
-        writeConfig();
+        writeConfig(configFilename);
+        throw new ClientException("implement");
+        // close all sockets.
     }
 
-    private void readConfig() throws IOException {
-        Scanner in = new Scanner(new FileInputStream(configFilename));
-    }
-
-    private void writeConfig() throws IOException {
-        PrintWriter writer = new PrintWriter(new FileOutputStream(configFilename));
-
+    private void connectToTracker() throws ExecutionException, InterruptedException, IOException {
+        synchronized (trackerMonitor) {
+            trackerChannel = AsynchronousSocketChannel.open();
+            Future trackerConnectionFuture = trackerChannel.connect(trackerAddress);
+            Object connectionResult = trackerConnectionFuture.get();
+            if (connectionResult != null) {
+                throw new ClientException("Error while getting trackerConnectionFuture: connectionResult != null");
+            }
+        }
+        logger.info("connected to tracker: " + trackerAddress);
     }
 }

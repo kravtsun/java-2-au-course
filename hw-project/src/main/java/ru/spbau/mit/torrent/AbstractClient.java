@@ -1,10 +1,13 @@
 package ru.spbau.mit.torrent;
 
 import java.io.Closeable;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.nio.channels.AsynchronousSocketChannel;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ExecutionException;
 
 public abstract class AbstractClient implements Closeable {
     private final InetSocketAddress address;
@@ -39,16 +42,26 @@ public abstract class AbstractClient implements Closeable {
         this.address = address;
     }
 
-    public abstract boolean isUpdated();
-
-    public abstract void setUpdated();
-
     public InetSocketAddress getAddress() {
         return address;
     }
 
-    // TODO abstract a separate Client donor interface.
-    public abstract List<Integer> stat(int fileId);
+    // TODO for all those commands from tracker we should implement the same methods in client.
+    // doing all with execute prefix for decrease mess-up.
+    public abstract List<FileProxy> executeList() throws IOException;
 
-    public abstract void get(int fileId, int part, OutputStream out);
+    public abstract List<InetSocketAddress> executeSources(int fileId) throws IOException;
+
+    // Client-specific requests.
+    public abstract int executeUpload(String filename) throws IOException;
+
+    public abstract List<Integer> executeStat(AsynchronousSocketChannel in, int fileId) throws IOException;
+
+    public abstract void executeGet(AsynchronousSocketChannel in, int fileId, int part) throws IOException;
+
+    public abstract void proceedGet(AsynchronousSocketChannel out, int fileId, int partId) throws IOException, ExecutionException, InterruptedException;
+
+    public abstract void proceedStat(AsynchronousSocketChannel out, int fileId) throws IOException;
+
+    public abstract boolean executeUpdate() throws IOException;
 }
