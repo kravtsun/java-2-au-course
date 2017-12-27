@@ -1,5 +1,6 @@
 package ru.spbau.mit.torrent;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.util.List;
@@ -32,16 +33,16 @@ public interface AbstractClient {
      Этот класс используется для хранения информации на трекере.
      */
 
-    List<FileProxy> executeList() throws Exception;
+    List<FileProxy> executeList() throws NIOException;
 
-    List<InetSocketAddress> executeSources(int fileId) throws Exception;
+    List<InetSocketAddress> executeSources(int fileId) throws NIOException;
 
     // Client-specific requests.
-    int executeUpload(String filename) throws Exception;
+    int executeUpload(String filename) throws NIOException;
 
-    List<Integer> executeStat(AsynchronousSocketChannel in, int fileId) throws Exception;
+    List<Integer> executeStat(AsynchronousSocketChannel in, int fileId) throws NIOException;
 
-    void executeGet(AsynchronousSocketChannel in, int fileId, int part) throws Exception;
+    void executeGet(AsynchronousSocketChannel in, int fileId, int part) throws IOException, NIOException;
 
-    boolean executeUpdate() throws Exception;
+    boolean executeUpdate() throws NIOException;
 }

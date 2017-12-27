@@ -7,7 +7,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.nio.channels.AsynchronousSocketChannel;
 
-import static ru.spbau.mit.torrent.NIOAsyncProcedures.readInt;
+import static ru.spbau.mit.torrent.NIOProcedures.readInt;
 import static ru.spbau.mit.torrent.Utils.*;
 
 public abstract class AbstractClientSession implements Runnable, Closeable {
@@ -62,7 +62,7 @@ public abstract class AbstractClientSession implements Runnable, Closeable {
         return channel;
     }
 
-    abstract void proceedGet(int fileId, int partId) throws Exception;
+    abstract void proceedGet(int fileId, int partId) throws IOException, NIOException;
 
     abstract void proceedStat(int fileId) throws Exception;
 }

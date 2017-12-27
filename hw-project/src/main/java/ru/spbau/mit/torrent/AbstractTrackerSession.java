@@ -8,11 +8,11 @@ import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.channels.AsynchronousSocketChannel;
 
-import static ru.spbau.mit.torrent.NIOAsyncProcedures.readInt;
+import static ru.spbau.mit.torrent.NIOProcedures.readInt;
 import static ru.spbau.mit.torrent.Utils.*;
 
 public abstract class AbstractTrackerSession implements Closeable, Runnable {
-    private static final Logger LOGGER = LogManager.getLogger("trackerApp");
+    private final Logger logger = LogManager.getLogger("trackerSession");
     private final AsynchronousSocketChannel channel;
 
     AbstractTrackerSession(AsynchronousSocketChannel channel) {
@@ -24,7 +24,7 @@ public abstract class AbstractTrackerSession implements Closeable, Runnable {
         try {
             channel.close();
         } catch (IOException e) {
-            LOGGER.error("Error while trying to close socket from client: " + e);
+            logger.error("Error while trying to close socket from client: " + e);
             throw e;
         }
     }
@@ -37,7 +37,7 @@ public abstract class AbstractTrackerSession implements Closeable, Runnable {
                 try {
                     requestType = readInt(channel);
                 } catch (BufferUnderflowException e) {
-                    LOGGER.warn("Channel seems to be closed.");
+                    logger.warn("Channel seems to be closed.");
                     return;
                 }
                 switch (requestType) {
@@ -58,7 +58,7 @@ public abstract class AbstractTrackerSession implements Closeable, Runnable {
 
                 }
             } catch (Exception e) {
-                LOGGER.error("Error while proceeding request: " + e);
+                logger.error("Error while proceeding request: " + e);
             }
         }
     }
@@ -67,11 +67,11 @@ public abstract class AbstractTrackerSession implements Closeable, Runnable {
         return channel;
     }
 
-    abstract void proceedList() throws Exception;
+    abstract void proceedList() throws NIOException;
 
-    abstract void proceedUpload() throws Exception;
+    abstract void proceedUpload() throws NIOException;
 
-    abstract void proceedUpdate() throws Exception;
+    abstract void proceedUpdate() throws NIOException;
 
-    abstract void proceedSources() throws Exception;
+    abstract void proceedSources() throws NIOException;
 }

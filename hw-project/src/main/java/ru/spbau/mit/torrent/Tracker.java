@@ -13,7 +13,7 @@ import java.net.InetSocketAddress;
 import java.nio.channels.*;
 import java.util.*;
 
-import static ru.spbau.mit.torrent.NIOAsyncProcedures.*;
+import static ru.spbau.mit.torrent.NIOProcedures.*;
 import static ru.spbau.mit.torrent.Utils.*;
 
 public class Tracker extends Server implements AbstractTracker, AutoCloseable, Configurable {
@@ -24,17 +24,13 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
     private Map<Integer, Set<InetSocketAddress>> fileSeeds = new HashMap<>();
     private final Object monitor = new Object();
 
-    public Tracker(InetSocketAddress listeningAddress, String configFilename) throws IOException {
+    public Tracker(InetSocketAddress listeningAddress, String configFilename) throws IOException, NIOException {
         super(listeningAddress);
         initEmpty();
-        try {
-            readConfig(configFilename);
-        } catch (IOException e) {
-            LOGGER.error("Failed to read config file: " + this.configFilename);
-        }
+        readConfig(configFilename);
     }
 
-    public Tracker(InetSocketAddress listeningAddress) throws IOException {
+    public Tracker(InetSocketAddress listeningAddress) throws IOException, NIOException {
         this(listeningAddress, null);
     }
 
@@ -44,7 +40,7 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
     }
 
     @Override
-    public synchronized void readConfig(String configFilename) throws IOException {
+    public synchronized void readConfig(String configFilename) throws IOException, NIOException {
         this.configFilename = configFilename;
         if (configFilename == null) {
             LOGGER.warn("No configuration file was specified. Default settings...");
@@ -55,14 +51,14 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
             FileChannel fileChannel = file.getChannel();
             int count;
             initEmpty();
-            count = NIOProcedures.readInt(fileChannel);
+            count = readInt(fileChannel);
             for (int i = 0; i < count; i++) {
                 fileProxies.add(NIOProcedures.readProxy(fileChannel));
             }
-            count = NIOProcedures.readInt(fileChannel);
+            count = readInt(fileChannel);
             for (int i = 0; i < count; i++) {
-                int fileId = NIOProcedures.readInt(fileChannel);
-                int seedsCount = NIOProcedures.readInt(fileChannel);
+                int fileId = readInt(fileChannel);
+                int seedsCount = readInt(fileChannel);
                 fileSeeds.put(fileId, new HashSet<>());
                 for (int j = 0; j < seedsCount; j++) {
                     InetSocketAddress address = NIOProcedures.readAddress(fileChannel);
@@ -73,7 +69,7 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
     }
 
     @Override
-    public synchronized void writeConfig(String configFilename) throws IOException {
+    public synchronized void writeConfig(String configFilename) throws IOException, NIOException {
         if (configFilename == null) {
             LOGGER.warn("No configuration file specified, no settings saved.");
             return;
@@ -81,16 +77,16 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
         try (RandomAccessFile file = new RandomAccessFile(configFilename, "rw")) {
             LOGGER.info("Writing configuration to file: " + configFilename);
             FileChannel fileChannel = file.getChannel();
-            NIOProcedures.writeInt(fileChannel, fileProxies.size());
+            writeInt(fileChannel, fileProxies.size());
             for (FileProxy fileProxy : fileProxies) {
                 NIOProcedures.writeProxy(fileChannel, fileProxy);
             }
 
-            NIOProcedures.writeInt(fileChannel, fileSeeds.size());
+            writeInt(fileChannel, fileSeeds.size());
             for (Map.Entry<Integer, Set<InetSocketAddress>> entry : fileSeeds.entrySet()) {
-                NIOProcedures.writeInt(fileChannel, entry.getKey());
+                writeInt(fileChannel, entry.getKey());
                 int seedsCount = entry.getValue().size();
-                NIOProcedures.writeInt(fileChannel, seedsCount);
+                writeInt(fileChannel, seedsCount);
                 for (InetSocketAddress address : entry.getValue()) {
                     NIOProcedures.writeAddress(fileChannel, address);
                 }
@@ -146,8 +142,9 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
                         break;
                 }
             }
-        } catch (IOException e) {
+        } catch (IOException | NIOException e) {
             LOGGER.error("Tracker error: " + e);
+            e.printStackTrace();
         }
     }
 
@@ -155,7 +152,11 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
     public synchronized void close() throws IOException {
         super.close();
         synchronized (monitor) {
-            writeConfig(configFilename);
+            try {
+                writeConfig(configFilename);
+            } catch (NIOException e) {
+                throw new IOException(e);
+            }
         }
     }
 
@@ -225,7 +226,7 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
         private InetSocketAddress address;
         private long lastUpdated;
 
-        TrackerSession(AsynchronousSocketChannel channel) throws Exception {
+        TrackerSession(AsynchronousSocketChannel channel) throws NIOException {
             super(channel);
             int opCode = readInt(channel);
             if (opCode != CODE_UPDATE) {
@@ -254,7 +255,7 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
         }
 
         @Override
-        synchronized void proceedList() throws Exception {
+        synchronized void proceedList() throws NIOException {
             LOGGER.info("Proceeding: " + COMMAND_LIST);
             List<FileProxy> files = list();
             // TODO protobuf
@@ -265,7 +266,7 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
         }
 
         @Override
-        synchronized void proceedUpload() throws Exception {
+        synchronized void proceedUpload() throws NIOException {
             String filename = readString(getChannel());
             long size = readLong(getChannel());
             int fileId = upload(address, filename, size);
@@ -273,7 +274,7 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
         }
 
         @Override
-        synchronized void proceedUpdate() throws Exception {
+        synchronized void proceedUpdate() throws NIOException {
             LOGGER.info("Proceeding: " + COMMAND_UPDATE);
             // TODO protobuf
             address = readAddress(getChannel());
@@ -291,7 +292,7 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
         }
 
         @Override
-        synchronized void proceedSources() throws Exception {
+        synchronized void proceedSources() throws NIOException {
             LOGGER.info("Proceeding: " + COMMAND_SOURCES);
             int fileId = readInt(getChannel());
             List<InetSocketAddress> seeds = sources(fileId);
