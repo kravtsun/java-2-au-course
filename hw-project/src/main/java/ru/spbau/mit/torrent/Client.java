@@ -11,7 +11,6 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.BufferUnderflowException;
-import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.FileChannel;
@@ -22,7 +21,7 @@ import java.util.concurrent.Future;
 import static ru.spbau.mit.torrent.NIOProcedures.*;
 import static ru.spbau.mit.torrent.Utils.*;
 
-public class Client extends Server implements AbstractClient, Configurable, Closeable {
+public class Client extends Server implements AbstractClient, Configurable, FileParter, Closeable {
     private static final Logger LOGGER = LogManager.getLogger("clientApp");
     private final Logger logger;
     private AsynchronousSocketChannel trackerChannel;
@@ -39,7 +38,7 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
     }
 
     public Client(InetSocketAddress listeningAddress, InetSocketAddress trackerAddress, String configFilename) throws NIOException, IOException {
-        connect(listeningAddress);
+        bind(listeningAddress);
         logger = LogManager.getLogger("client:" + listeningAddress.getPort());
         if (configFilename == null) {
             logger.warn("No config file specified, loading fresh client.");
@@ -48,9 +47,6 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
         }
         this.configFilename = configFilename;
         connectToTracker(trackerAddress);
-        if (!executeUpdate()) {
-            throw new ClientException("Failed to execute initial update");
-        }
     }
 
     @Override
@@ -171,9 +167,18 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
         logger.info("executeGet");
         List<Integer> parts;
         FileProxy fileProxy;
+
+        // copying can be extensive.
         synchronized (this) {
             parts = fileParts.get(fileId);
+            if (parts != null) {
+                parts = new ArrayList<>(parts);
+            }
+
             fileProxy = files.get(fileId);
+            if (fileProxy != null) {
+                fileProxy = fileProxy.clone();
+            }
         }
 
         if (parts == null) {
@@ -227,12 +232,16 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
     @Override
     public int executeUpload(String filename) throws NIOException {
         logger.info("executeUpload");
-        writeInt(trackerChannel, CODE_UPLOAD);
-        writeString(trackerChannel, filename);
-        File file = new File(filename);
-        long size = file.length();
-        writeLong(trackerChannel, size);
-        int fileId = readInt(trackerChannel);
+        long size;
+        int fileId;
+        synchronized (trackerMonitor) {
+            writeInt(trackerChannel, CODE_UPLOAD);
+            writeString(trackerChannel, filename);
+            File file = new File(filename);
+            size = file.length();
+            writeLong(trackerChannel, size);
+            fileId = readInt(trackerChannel);
+        }
         FileProxy fileProxy = new FileProxy(fileId, filename, size);
         synchronized (this) {
             files.put(fileId, fileProxy);
@@ -278,7 +287,9 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
     @Override
     public void close() throws IOException {
         writeConfig(configFilename);
-        trackerChannel.close();
+        synchronized (trackerMonitor) {
+            trackerChannel.close();
+        }
     }
 
     private static AsynchronousSocketChannel getOtherClientChannel(String host, int port) throws IOException {
@@ -410,7 +421,17 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
         }
     }
 
-    private void connectToTracker(InetSocketAddress trackerAddress) throws ClientException {
+    @Override
+    public void connectToTracker(InetSocketAddress trackerAddress) throws ClientException {
+        String notBindedErrorMessage = "Failed to get serving address";
+        try {
+            if (getAddress() == null) {
+               throw new ClientException(notBindedErrorMessage);
+            }
+        } catch (IOException e) {
+            throw new ClientException(notBindedErrorMessage, e);
+        }
+
         synchronized (trackerMonitor) {
             try {
                 trackerChannel = AsynchronousSocketChannel.open();
@@ -422,6 +443,16 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
             } catch (InterruptedException | ExecutionException | IOException e) {
                 throw new ClientException("Failed to connect to tracker: " + e);
             }
+
+            final String initialUpdateErrorMessage = "Failed to execute initial update";
+            try {
+                if (!executeUpdate()) {
+                    throw new ClientException(initialUpdateErrorMessage);
+                }
+            } catch (NIOException e) {
+                throw new ClientException(initialUpdateErrorMessage, e);
+            }
+
             new Thread(() -> {
                 while (trackerChannel.isOpen()) {
                     while (!Thread.interrupted()) {
@@ -447,7 +478,7 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
 
     @Override
     void serve(AsynchronousSocketChannel channel) {
-        try (ClientSession session = new ClientSession(channel)) {
+        try (ClientSession session = new ClientSession(this, channel)) {
             session.run();
         } catch (Exception e) {
             LOGGER.error("ClientSession error: " + e);
@@ -455,40 +486,20 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
         }
     }
 
-    private class ClientSession extends AbstractClientSession {
-        ClientSession(AsynchronousSocketChannel channel) {
-            super(channel);
-        }
+    @Override
+    public synchronized FileProxy getFile(int fileId) {
+        FileProxy fileProxy = files.get(fileId);
+        return fileProxy == null ? null : fileProxy.clone();
+    }
 
-        @Override
-        public void proceedGet(int fileId, int partId) throws IOException, NIOException {
-            FileProxy fileProxy;
-            synchronized (this) {
-                fileProxy = files.get(fileId);
-            }
-
-            try (RandomAccessFile file = new RandomAccessFile(fileProxy.getName(), "r")) {
-                long length = file.length();
-                long start = partId * FILE_PART_SIZE;
-                if (start > length) {
-                    throw new ClientException("part " + partId + " is not consistent with file length: " + length);
-                }
-                long finish = start + FILE_PART_SIZE;
-                if (finish > length) {
-                    finish = length;
-                }
-                ByteBuffer buffer = file.getChannel().map(FileChannel.MapMode.READ_ONLY, start, finish);
-                writeUntil(buffer, getChannel());
-            }
+    @Override
+    public synchronized List<Integer> getFileParts(int fileId) {
+        List<Integer> parts = fileParts.get(fileId);
+        if (parts != null) {
+            parts = new ArrayList<>(parts);
+        } else {
+            parts = Collections.emptyList();
         }
-
-        @Override
-        public void proceedStat(int fileId) throws NIOException {
-            List<Integer> parts = new ArrayList<>(fileParts.get(fileId));
-            writeInt(getChannel(), parts.size());
-            for (Integer part: parts) {
-                writeInt(getChannel(), part);
-            }
-        }
+        return parts;
     }
 }

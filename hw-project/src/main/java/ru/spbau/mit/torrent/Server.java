@@ -25,10 +25,14 @@ public abstract class Server implements Closeable {
     }
 
     InetSocketAddress getAddress() throws IOException {
-        return (InetSocketAddress) servingChannel.getLocalAddress();
+        if (servingChannel.isOpen()) {
+            return (InetSocketAddress) servingChannel.getLocalAddress();
+        } else {
+            return null;
+        }
     }
 
-    public void connect(InetSocketAddress listeningAddress) throws IOException {
+    public void bind(InetSocketAddress listeningAddress) throws IOException {
         servingChannel.bind(listeningAddress);
         LOGGER.info("Bound to address: " + listeningAddress);
 

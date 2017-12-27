@@ -135,7 +135,8 @@ final class NIOProcedures {
         try {
             future.get();
         } catch (InterruptedException | ExecutionException e) {
-            throw new NIOException("Error while waiting for reading", e);
+            Throwable throwable = e.getCause();
+            throw new NIOException("Error while waiting for reading", throwable == null ? e : throwable);
         }
         buffer.flip();
     }

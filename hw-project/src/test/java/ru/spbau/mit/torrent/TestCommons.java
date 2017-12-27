@@ -8,7 +8,7 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 
-public class TestCommons {
+final class TestCommons {
     static final int TIME_LIMIT = 2000;
     static final int BIND_TIMEOUT = 100;
     static final String TEST_DIR = "src/test/resources";

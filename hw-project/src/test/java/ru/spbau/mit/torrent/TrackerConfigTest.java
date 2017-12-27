@@ -11,29 +11,24 @@ import static ru.spbau.mit.torrent.TestCommons.*;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.net.BindException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
-import java.nio.file.Paths;
 import java.util.*;
 
-public class TrackerTest {
+public class TrackerConfigTest {
     private Tracker tracker;
-    private InetSocketAddress listeningAddress;
     private static int fileIdBase;
 
     @Before
     public void setUp() throws Exception {
-        listeningAddress = getTrackerAddress();
+        InetSocketAddress listeningAddress = getTrackerAddress();
         while (true) {
             try {
-                tracker = new Tracker(listeningAddress, null);
+                tracker = new Tracker(listeningAddress);
             } catch (BindException ignored) {
                 continue;
             }
             break;
         }
-
         fileIdBase = 0;
     }
 
@@ -42,6 +37,37 @@ public class TrackerTest {
         tracker.readConfig(EMPTY_CONFIG);
         tracker.close();
         Thread.sleep(BIND_TIMEOUT);
+    }
+
+    @Test(timeout = TIME_LIMIT)
+    public void testCleanStart() throws Exception {
+        Assert.isEmpty(tracker.list());
+        assertTrue(getFileProxies().isEmpty());
+        assertTrue(getFileSeeds().isEmpty());
+//        tracker.writeConfig(EMPTY_CONFIG);
+    }
+
+    @Test(expected = TrackerException.class, timeout = TIME_LIMIT)
+    public void sourcesFailsOnNonExistentFile() throws Exception {
+        testCleanStart();
+        Assert.isEmpty(tracker.sources(-1));
+        testCleanStart();
+    }
+
+    @Test(timeout = TIME_LIMIT)
+    public void emptyConfigLoading() throws Exception {
+        testCleanStart();
+        tracker.readConfig(EMPTY_CONFIG);
+        testCleanStart();
+    }
+
+    @Test(timeout = TIME_LIMIT)
+    public void emptyConfigStoring() throws Exception {
+        testCleanStart();
+        tracker.writeConfig(EMPTY_CONFIG);
+        testCleanStart();
+        tracker.readConfig(EMPTY_CONFIG);
+        testCleanStart();
     }
 
     private Object getTrackerFieldCollection(String fieldString) throws ReflectiveOperationException {
@@ -56,37 +82,6 @@ public class TrackerTest {
 
     private HashMap getFileSeeds() throws ReflectiveOperationException {
         return (HashMap) getTrackerFieldCollection("fileSeeds");
-    }
-
-    @Test(timeout = TIME_LIMIT)
-    public void cleanStart() throws Exception {
-        Assert.isEmpty(tracker.list());
-        assertTrue(getFileProxies().isEmpty());
-        assertTrue(getFileSeeds().isEmpty());
-//        tracker.writeConfig(EMPTY_CONFIG);
-    }
-
-    @Test(expected = TrackerException.class, timeout = TIME_LIMIT)
-    public void sourcesFailsOnNonExistentFile() throws Exception {
-        cleanStart();
-        Assert.isEmpty(tracker.sources(-1));
-        cleanStart();
-    }
-
-    @Test(timeout = TIME_LIMIT)
-    public void emptyConfigLoading() throws Exception {
-        cleanStart();
-        tracker.readConfig(EMPTY_CONFIG);
-        cleanStart();
-    }
-
-    @Test(timeout = TIME_LIMIT)
-    public void emptyConfigStoring() throws Exception {
-        cleanStart();
-        tracker.writeConfig(EMPTY_CONFIG);
-        cleanStart();
-        tracker.readConfig(EMPTY_CONFIG);
-        cleanStart();
     }
 
     private void uploadFile(File file) throws Exception {

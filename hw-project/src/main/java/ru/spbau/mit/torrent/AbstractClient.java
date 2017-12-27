@@ -33,6 +33,12 @@ public interface AbstractClient {
      Этот класс используется для хранения информации на трекере.
      */
 
+//    Server.bind() should be called before connecting to tracker.
+    void connectToTracker(InetSocketAddress trackerAddress) throws ClientException;
+
+//    // TODO
+//    void disconnect();
+
     List<FileProxy> executeList() throws NIOException;
 
     List<InetSocketAddress> executeSources(int fileId) throws NIOException;
