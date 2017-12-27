@@ -6,6 +6,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static ru.spbau.mit.torrent.TestCommons.*;
 
 import java.io.File;
 import java.lang.reflect.Field;
@@ -17,29 +18,9 @@ import java.nio.file.Paths;
 import java.util.*;
 
 public class TrackerTest {
-    static final int TIME_LIMIT = 2000;
-    static final int BIND_TIMEOUT = 100;
-    static final String TEST_DIR = "test";
-    static final int DEFAULT_PORT = 8081;
     private Tracker tracker;
     private InetSocketAddress listeningAddress;
-
-    static final String HOSTNAME = "localhost";
-    static final String EMPTY_CONFIG = Paths.get(TEST_DIR, "empty_tracker.config").toString();
-    static final List<Integer> CLIENT_PORTS = Arrays.asList(8082, 8083, 8084, 8085);
-
-    static final File EMPTY_FILE = new File(Paths.get(TEST_DIR, "empty.txt").toString());
-    static final File CRLF_FILE = new File(Paths.get(TEST_DIR, "crlf.txt").toString());
-
     private static int fileIdBase;
-
-    static InetSocketAddress getClientAddress(int index) throws UnknownHostException {
-        return new InetSocketAddress(InetAddress.getByName(HOSTNAME), CLIENT_PORTS.get(index));
-    }
-
-    static InetSocketAddress getTrackerAddress() throws UnknownHostException {
-        return new InetSocketAddress(InetAddress.getByName(HOSTNAME), DEFAULT_PORT);
-    }
 
     @Before
     public void setUp() throws Exception {

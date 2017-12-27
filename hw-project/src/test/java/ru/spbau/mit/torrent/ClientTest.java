@@ -5,7 +5,7 @@ import org.junit.Before;
 
 import java.net.BindException;
 
-import static ru.spbau.mit.torrent.TrackerTest.*;
+import static ru.spbau.mit.torrent.TestCommons.*;
 
 public class ClientTest {
     private Tracker tracker;

@@ -14,24 +14,21 @@ import java.util.concurrent.Executors;
 
 public abstract class Server implements Closeable {
     private static final Logger LOGGER = LogManager.getLogger("Server");
-    private final InetSocketAddress listeningAddress;
     private AsynchronousServerSocketChannel servingChannel;
     private List<AsynchronousSocketChannel> channels = new ArrayList<>();
     private final AsynchronousChannelGroup group;
 
-    Server(InetSocketAddress listeningAddress) throws IOException {
-        this.listeningAddress = listeningAddress;
+    Server() throws IOException {
         ExecutorService trackerPool = Executors.newCachedThreadPool();
         group = AsynchronousChannelGroup.withCachedThreadPool(trackerPool, 4);
-        open();
-    }
-
-    InetSocketAddress getAddress() {
-        return listeningAddress;
-    }
-
-    private void open() throws IOException {
         servingChannel = AsynchronousServerSocketChannel.open(group);
+    }
+
+    InetSocketAddress getAddress() throws IOException {
+        return (InetSocketAddress) servingChannel.getLocalAddress();
+    }
+
+    public void connect(InetSocketAddress listeningAddress) throws IOException {
         servingChannel.bind(listeningAddress);
         LOGGER.info("Bound to address: " + listeningAddress);
 

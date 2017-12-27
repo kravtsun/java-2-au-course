@@ -31,7 +31,7 @@ interface AbstractTracker {
      * @return
      */
     // loop request from tracker to itself.
-    int upload(String filename, long size);
+//    int upload(String filename, long size);
 
     int upload(InetSocketAddress address, String filename, long size);
 

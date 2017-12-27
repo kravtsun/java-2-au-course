@@ -34,6 +34,25 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
     private Map<Integer, List<Integer>> fileParts = new HashMap<>();
     private Map<Integer, FileProxy> files = new HashMap<>();
 
+    public Client() throws IOException {
+        logger = LogManager.getLogger("client");
+    }
+
+    public Client(InetSocketAddress listeningAddress, InetSocketAddress trackerAddress, String configFilename) throws NIOException, IOException {
+        connect(listeningAddress);
+        logger = LogManager.getLogger("client:" + listeningAddress.getPort());
+        if (configFilename == null) {
+            logger.warn("No config file specified, loading fresh client.");
+        } else {
+            readConfig(configFilename);
+        }
+        this.configFilename = configFilename;
+        connectToTracker(trackerAddress);
+        if (!executeUpdate()) {
+            throw new ClientException("Failed to execute initial update");
+        }
+    }
+
     @Override
     public synchronized void readConfig(String configFilename) throws IOException, NIOException {
         this.configFilename = configFilename;
@@ -91,150 +110,6 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
         } catch (IOException | NIOException e) {
             String message = "Failed to write configuration to file " + configFilename;
             throw new ClientException(message, e);
-        }
-    }
-
-    public Client(InetSocketAddress listeningAddress, InetSocketAddress trackerAddress, String configFilename) throws NIOException, IOException {
-            super(listeningAddress);
-        logger = LogManager.getLogger("client:" + listeningAddress.getPort());
-        if (configFilename == null) {
-            logger.warn("No config file specified, loading fresh client.");
-        } else {
-            readConfig(configFilename);
-        }
-        this.configFilename = configFilename;
-        connectToTracker(trackerAddress);
-        if (!executeUpdate()) {
-            throw new ClientException("Failed to execute initial update");
-        }
-    }
-
-    private static AsynchronousSocketChannel getOtherClientChannel(String host, int port) throws IOException {
-        InetSocketAddress otherClientAddress =
-                new InetSocketAddress(InetAddress.getByName(host), port);
-        AsynchronousSocketChannel channel = AsynchronousSocketChannel.open();
-        Future connectionFuture = channel.connect(otherClientAddress);
-
-        try {
-            Object connectionResult = connectionFuture.get();
-            if (connectionResult != null) {
-                LOGGER.warn("while getting trackerConnectionFuture: connectionResult != null");
-            }
-        } catch (InterruptedException | ExecutionException e) {
-            String message = "Error while waiting for connecting to other client with address "
-                    + otherClientAddress + ": " + e;
-            throw new ClientException(message, e);
-        }
-        LOGGER.info("connected to other client: " + otherClientAddress);
-        return channel;
-    }
-
-    private static void executeCommandLoop(Scanner scanner, Client client) {
-        // TODO print available commands.
-        AsynchronousSocketChannel otherClientChannel = null;
-
-        main_loop:
-        while (true) {
-            String command = scanner.next();
-            int fileId;
-
-            final String otherClientAddressErrorMessage = "Error while retrieving other client's address";
-
-            try {
-                switch (command) {
-                    case "connect":
-                        LOGGER.info("Connecting to other client");
-                        if (otherClientChannel != null) {
-                            try {
-                                LOGGER.error("Already connected to client: " + otherClientChannel.getRemoteAddress());
-                            } catch (IOException e) {
-                                LOGGER.error(otherClientAddressErrorMessage + e);
-                            }
-                        }
-                        try {
-                            LOGGER.info("Other client address: ");
-                            String host = scanner.next();
-                            LOGGER.info("port: ");
-                            int port = scanner.nextInt();
-                            otherClientChannel = getOtherClientChannel(host, port);
-                        } catch (Exception e) {
-                            LOGGER.error("Failed to connect to other client: " + e);
-                            otherClientChannel = null;
-                        }
-                        if (otherClientChannel != null) {
-                            try {
-                                LOGGER.info("Connection successful to client: " + otherClientChannel.getRemoteAddress());
-                            } catch (IOException e) {
-                                LOGGER.error(otherClientAddressErrorMessage + e);
-                            }
-                        }
-                        break;
-                    case "disconnect":
-                        LOGGER.info("Disconnecting from other client");
-                        if (otherClientChannel == null) {
-                            LOGGER.error("Not connected to any clients");
-                        } else {
-                            try {
-                                otherClientChannel.close();
-                            } catch (IOException e) {
-                                LOGGER.error("Error while closing channel: " + e);
-                            } finally {
-                                otherClientChannel = null;
-                            }
-                        }
-                        break;
-                    case COMMAND_EXIT:
-                        LOGGER.info("Exiting...");
-                        break main_loop;
-                    case COMMAND_LIST:
-                        LOGGER.info("List request");
-                        Utils.infoList(LOGGER, client.executeList());
-                        break;
-                    case COMMAND_SOURCES:
-                        fileId = scanner.nextInt();
-                        LOGGER.info("Sources request for fileId: " + fileId);
-                        Utils.infoSources(LOGGER, client.executeSources(fileId));
-                        break;
-                    case COMMAND_UPLOAD:
-                        String filename = scanner.next();
-                        LOGGER.info("Uploading, filename: " + filename);
-                        fileId = client.executeUpload(filename);
-                        LOGGER.info("Uploaded, fileId: " + fileId);
-                        break;
-                    case COMMAND_GET:
-                        LOGGER.info("Get command: ");
-                        LOGGER.info("fileId: ");
-                        fileId = scanner.nextInt();
-                        LOGGER.info("partId: ");
-                        int partId = scanner.nextInt();
-                        client.executeGet(otherClientChannel, fileId, partId);
-                        break;
-                    case COMMAND_STAT:
-                        LOGGER.info("Stat command: ");
-
-                        fileId = scanner.nextInt();
-                        LOGGER.info("fileId: " + fileId);
-                        List<Integer> parts = client.executeStat(otherClientChannel, fileId);
-                        LOGGER.info("Parts received: " + parts.size());
-                        for (Integer part : parts) {
-                            LOGGER.info("#" + part);
-                        }
-                        break;
-                    case COMMAND_UPDATE:
-                        LOGGER.info("Update command");
-                        boolean updateStatus = client.executeUpdate();
-                        LOGGER.info("Update status: " + updateStatus);
-                    default:
-                        LOGGER.error("Unknown command: " + command);
-                        break;
-                }
-            } catch (NIOException e) {
-                LOGGER.error("Bad command: " + e);
-                e.printStackTrace();
-            } catch (IOException e) {
-                LOGGER.error("Bad file: " + e);
-                e.printStackTrace();
-            }
         }
     }
 
@@ -384,7 +259,11 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
         logger.info("executeUpdate");
         synchronized (trackerMonitor) {
             writeInt(trackerChannel, CODE_UPDATE);
-            writeAddress(trackerChannel, getAddress());
+            try {
+                writeAddress(trackerChannel, getAddress());
+            } catch (IOException e) {
+                throw new ClientException("Failed to get address", e);
+            }
             synchronized (this) {
                 writeInt(trackerChannel, files.size());
                 for (Integer fileId : files.keySet()) {
@@ -400,6 +279,135 @@ public class Client extends Server implements AbstractClient, Configurable, Clos
     public void close() throws IOException {
         writeConfig(configFilename);
         trackerChannel.close();
+    }
+
+    private static AsynchronousSocketChannel getOtherClientChannel(String host, int port) throws IOException {
+        InetSocketAddress otherClientAddress =
+                new InetSocketAddress(InetAddress.getByName(host), port);
+        AsynchronousSocketChannel channel = AsynchronousSocketChannel.open();
+        Future connectionFuture = channel.connect(otherClientAddress);
+
+        try {
+            Object connectionResult = connectionFuture.get();
+            if (connectionResult != null) {
+                LOGGER.warn("while getting trackerConnectionFuture: connectionResult != null");
+            }
+        } catch (InterruptedException | ExecutionException e) {
+            String message = "Error while waiting for connecting to other client with address "
+                    + otherClientAddress + ": " + e;
+            throw new ClientException(message, e);
+        }
+        LOGGER.info("connected to other client: " + otherClientAddress);
+        return channel;
+    }
+
+    private static void executeCommandLoop(Scanner scanner, Client client) {
+        // TODO print available commands.
+        AsynchronousSocketChannel otherClientChannel = null;
+
+        main_loop:
+        while (true) {
+            String command = scanner.next();
+            int fileId;
+
+            final String otherClientAddressErrorMessage = "Error while retrieving other client's address";
+
+            try {
+                switch (command) {
+                    case "connect":
+                        LOGGER.info("Connecting to other client");
+                        if (otherClientChannel != null) {
+                            try {
+                                LOGGER.error("Already connected to client: " + otherClientChannel.getRemoteAddress());
+                            } catch (IOException e) {
+                                LOGGER.error(otherClientAddressErrorMessage + e);
+                            }
+                        }
+                        try {
+                            LOGGER.info("Other client address: ");
+                            String host = scanner.next();
+                            LOGGER.info("port: ");
+                            int port = scanner.nextInt();
+                            otherClientChannel = getOtherClientChannel(host, port);
+                        } catch (Exception e) {
+                            LOGGER.error("Failed to connect to other client: " + e);
+                            otherClientChannel = null;
+                        }
+                        if (otherClientChannel != null) {
+                            try {
+                                LOGGER.info("Connection successful to client: " + otherClientChannel.getRemoteAddress());
+                            } catch (IOException e) {
+                                LOGGER.error(otherClientAddressErrorMessage + e);
+                            }
+                        }
+                        break;
+                    case "disconnect":
+                        LOGGER.info("Disconnecting from other client");
+                        if (otherClientChannel == null) {
+                            LOGGER.error("Not connected to any clients");
+                        } else {
+                            try {
+                                otherClientChannel.close();
+                            } catch (IOException e) {
+                                LOGGER.error("Error while closing channel: " + e);
+                            } finally {
+                                otherClientChannel = null;
+                            }
+                        }
+                        break;
+                    case COMMAND_EXIT:
+                        LOGGER.info("Exiting...");
+                        break main_loop;
+                    case COMMAND_LIST:
+                        LOGGER.info("List request");
+                        Utils.infoList(LOGGER, client.executeList());
+                        break;
+                    case COMMAND_SOURCES:
+                        fileId = scanner.nextInt();
+                        LOGGER.info("Sources request for fileId: " + fileId);
+                        Utils.infoSources(LOGGER, client.executeSources(fileId));
+                        break;
+                    case COMMAND_UPLOAD:
+                        String filename = scanner.next();
+                        LOGGER.info("Uploading, filename: " + filename);
+                        fileId = client.executeUpload(filename);
+                        LOGGER.info("Uploaded, fileId: " + fileId);
+                        break;
+                    case COMMAND_GET:
+                        LOGGER.info("Get command: ");
+                        LOGGER.info("fileId: ");
+                        fileId = scanner.nextInt();
+                        LOGGER.info("partId: ");
+                        int partId = scanner.nextInt();
+                        client.executeGet(otherClientChannel, fileId, partId);
+                        break;
+                    case COMMAND_STAT:
+                        LOGGER.info("Stat command: ");
+
+                        fileId = scanner.nextInt();
+                        LOGGER.info("fileId: " + fileId);
+                        List<Integer> parts = client.executeStat(otherClientChannel, fileId);
+                        LOGGER.info("Parts received: " + parts.size());
+                        for (Integer part : parts) {
+                            LOGGER.info("#" + part);
+                        }
+                        break;
+                    case COMMAND_UPDATE:
+                        LOGGER.info("Update command");
+                        boolean updateStatus = client.executeUpdate();
+                        LOGGER.info("Update status: " + updateStatus);
+                    default:
+                        LOGGER.error("Unknown command: " + command);
+                        break;
+                }
+            } catch (NIOException e) {
+                LOGGER.error("Bad command: " + e);
+                e.printStackTrace();
+            } catch (IOException e) {
+                LOGGER.error("Bad file: " + e);
+                e.printStackTrace();
+            }
+        }
     }
 
     private void connectToTracker(InetSocketAddress trackerAddress) throws ClientException {

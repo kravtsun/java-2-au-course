@@ -24,8 +24,10 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
     private Map<Integer, Set<InetSocketAddress>> fileSeeds = new HashMap<>();
     private final Object monitor = new Object();
 
+    public Tracker() throws IOException {}
+
     public Tracker(InetSocketAddress listeningAddress, String configFilename) throws IOException, NIOException {
-        super(listeningAddress);
+        connect(listeningAddress);
         initEmpty();
         readConfig(configFilename);
     }
@@ -160,7 +162,6 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
         }
     }
 
-
     @Override
     public List<FileProxy> list() {
         synchronized (monitor) {
@@ -178,11 +179,6 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
             fileSeeds.put(fileProxy.getId(), addressList);
         }
         return fileProxy.getId();
-    }
-
-    @Override
-    public int upload(String filename, long size) {
-        return upload(getAddress(), filename, size);
     }
 
     @Override
