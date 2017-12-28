@@ -7,9 +7,11 @@ import org.apache.commons.cli.Options;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.net.InetSocketAddress;
+import java.nio.BufferUnderflowException;
 import java.nio.channels.*;
 import java.util.*;
 
@@ -22,30 +24,38 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
 
     private List<FileProxy> fileProxies = new ArrayList<>();
     private Map<Integer, Set<InetSocketAddress>> fileSeeds = new HashMap<>();
-    private final Object monitor = new Object();
 
-    public Tracker() throws IOException {}
+    public Tracker() throws IOException {
+        initEmpty();
+    }
 
     public Tracker(InetSocketAddress listeningAddress, String configFilename) throws IOException, NIOException {
+        this();
         bind(listeningAddress);
-        initEmpty();
-        readConfig(configFilename);
+        try {
+            readConfig(configFilename);
+        } catch (FileNotFoundException e) {
+            LOGGER.warn("Failed to read configuration from file: " + configFilename);
+        }
     }
 
     public Tracker(InetSocketAddress listeningAddress) throws IOException, NIOException {
         this(listeningAddress, null);
     }
 
-    private void initEmpty() {
-        synchronized (monitor) {
-            fileProxies = new ArrayList<>();
-            fileSeeds = new HashMap<>();
-        }
+    @Override
+    public synchronized void initEmpty() {
+        fileProxies = new ArrayList<>();
+        fileSeeds = new HashMap<>();
+    }
+
+    @Override
+    public synchronized void setConfig(String configFilename) {
+        this.configFilename = configFilename;
     }
 
     @Override
     public synchronized void readConfig(String configFilename) throws IOException, NIOException {
-        this.configFilename = configFilename;
         if (configFilename == null) {
             LOGGER.warn("No configuration file was specified. Default settings...");
             return;
@@ -56,20 +66,43 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
             int count;
             initEmpty();
             count = readInt(fileChannel);
+            LOGGER.debug("Number of proxies: " + count);
             for (int i = 0; i < count; i++) {
-                fileProxies.add(NIOProcedures.readProxy(fileChannel));
+                FileProxy fileProxy = NIOProcedures.readProxy(fileChannel);
+                LOGGER.debug("proxy: " + fileProxy);
+                fileProxies.add(fileProxy);
             }
+            int maxFileId = -1;
             count = readInt(fileChannel);
+            LOGGER.debug("Number of seeds for proxies: " + count);
             for (int i = 0; i < count; i++) {
                 int fileId = readInt(fileChannel);
+                if (fileId > maxFileId) {
+                    maxFileId = fileId;
+                }
                 int seedsCount = readInt(fileChannel);
-                fileSeeds.put(fileId, new HashSet<>());
+                Set<InetSocketAddress> seeds = new HashSet<>();
                 for (int j = 0; j < seedsCount; j++) {
                     InetSocketAddress address = NIOProcedures.readAddress(fileChannel);
-                    fileSeeds.get(fileId).add(address);
+                    seeds.add(address);
                 }
+                LOGGER.debug("fileId: " + fileId + ", seeds: " + fileSeeds);
+                fileSeeds.put(fileId, seeds);
             }
+            LOGGER.debug("maxFileId: " + maxFileId);
+            if (maxFileId != -1 && !fileSeeds.containsKey(maxFileId)) {
+                String message = "Something's not right, maxFileId: " + maxFileId + " but seeds are absent";
+                LOGGER.warn(message);
+            }
+
+            if (maxFileId != -1 && fileProxies.size() != maxFileId) {
+                String message = "Something's not right, maxFileId: " + maxFileId + " but fileProxies.size() = " + fileProxies.size();
+                LOGGER.warn(message);
+            }
+
+            FileProxy.FILE_ID.set(maxFileId + 1);
         }
+        setConfig(configFilename);
     }
 
     @Override
@@ -82,11 +115,14 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
             LOGGER.info("Writing configuration to file: " + configFilename);
             FileChannel fileChannel = file.getChannel();
             writeInt(fileChannel, fileProxies.size());
+            LOGGER.debug("Number of proxies: " + fileProxies.size());
             for (FileProxy fileProxy : fileProxies) {
                 NIOProcedures.writeProxy(fileChannel, fileProxy);
+                LOGGER.debug("proxy: " + fileProxy);
             }
 
             writeInt(fileChannel, fileSeeds.size());
+            LOGGER.debug("Number of seeds for proxies: " + fileSeeds.size());
             for (Map.Entry<Integer, Set<InetSocketAddress>> entry : fileSeeds.entrySet()) {
                 writeInt(fileChannel, entry.getKey());
                 int seedsCount = entry.getValue().size();
@@ -94,6 +130,7 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
                 for (InetSocketAddress address : entry.getValue()) {
                     NIOProcedures.writeAddress(fileChannel, address);
                 }
+                LOGGER.debug("fileId: " + entry.getKey() + ", seeds: " + entry.getValue());
             }
         }
     }
@@ -155,20 +192,16 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
     @Override
     public synchronized void close() throws IOException {
         super.close();
-        synchronized (monitor) {
-            try {
-                writeConfig(configFilename);
-            } catch (NIOException e) {
-                throw new IOException(e);
-            }
+        try {
+            writeConfig(configFilename);
+        } catch (NIOException e) {
+            throw new IOException(e);
         }
     }
 
     @Override
-    public List<FileProxy> list() {
-        synchronized (monitor) {
-            return new ArrayList<>(fileProxies);
-        }
+    public synchronized List<FileProxy> list() {
+        return new ArrayList<>(fileProxies);
     }
 
     @Override
@@ -176,7 +209,7 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
         final FileProxy fileProxy = new FileProxy(filename, size);
         Set<InetSocketAddress> addressList = new HashSet<>();
         addressList.add(address);
-        synchronized (monitor) {
+        synchronized (this) {
             fileProxies.add(fileProxy);
             fileSeeds.put(fileProxy.getId(), addressList);
         }
@@ -184,28 +217,25 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
     }
 
     @Override
-    public List<InetSocketAddress> sources(int fileId) {
-        synchronized (monitor) {
-            Set<InetSocketAddress> seeds = fileSeeds.get(fileId);
-            if (seeds == null) {
-                throw new TrackerException("No seeds present for fileId: " + fileId);
-            }
-            return new ArrayList<>(seeds);
+    public synchronized List<InetSocketAddress> sources(int fileId) {
+        Set<InetSocketAddress> seeds = fileSeeds.get(fileId);
+        if (seeds == null) {
+            LOGGER.warn("No seeds present for fileId: " + fileId);
+            return new ArrayList<>();
         }
+        return new ArrayList<>(seeds);
     }
 
     @Override
-    public boolean update(InetSocketAddress clientAddress, int[] fileIds) {
-        synchronized (monitor) {
-            try {
-                // as if once updated with some file the client will be treated as its seed forever.
-                for (int fileId : fileIds) {
-                    fileSeeds.get(fileId).add(clientAddress);
-                }
-            } catch (Exception e) {
-                LOGGER.warn("Update failed: " + e);
-                return false;
+    public synchronized boolean update(InetSocketAddress clientAddress, int[] fileIds) {
+        try {
+            // as if once updated with some file the client will be treated as its seed forever.
+            for (int fileId : fileIds) {
+                fileSeeds.get(fileId).add(clientAddress);
             }
+        } catch (Exception e) {
+            LOGGER.warn("Update failed: " + e);
+            return false;
         }
         return true;
     }
@@ -214,6 +244,8 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
     void serve(AsynchronousSocketChannel channel) {
         try (TrackerSession session = new TrackerSession(this, channel)) {
             session.run();
+        } catch (BufferUnderflowException e) {
+            LOGGER.info("Sessions seems to be closed by " + e.getMessage());
         } catch (Exception e) {
             LOGGER.error("TrackerSession error: " + e);
             e.printStackTrace();

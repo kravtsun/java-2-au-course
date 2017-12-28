@@ -91,10 +91,12 @@ final class NIOProcedures {
     }
 
     static void writeUntil(ByteBuffer buffer, Channel out) throws NIOException {
-        if (buffer.position() != buffer.capacity()) {
-            throw new NIOException("Buffer is not full.");
+        if (buffer.position() != buffer.capacity() && buffer.position() > 0) {
+            throw new NIOException("Buffer is neither full nor empty.");
         }
-        buffer.flip();
+        if (buffer.position() == buffer.capacity()) {
+            buffer.flip();
+        }
         // very blunt tool to avoid code duplication.
         if (out instanceof AsynchronousSocketChannel) {
             writeUntilAsync(buffer, (AsynchronousSocketChannel) out);
@@ -136,7 +138,7 @@ final class NIOProcedures {
             future.get();
         } catch (InterruptedException | ExecutionException e) {
             Throwable throwable = e.getCause();
-            throw new NIOException("Error while waiting for reading", throwable == null ? e : throwable);
+            throw new NIOException("Error while waiting for reading: " + (throwable == null ? e : throwable));
         }
         buffer.flip();
     }

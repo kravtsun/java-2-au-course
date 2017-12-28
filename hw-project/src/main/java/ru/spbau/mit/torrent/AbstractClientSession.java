@@ -5,13 +5,14 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.nio.BufferUnderflowException;
 import java.nio.channels.AsynchronousSocketChannel;
 
 import static ru.spbau.mit.torrent.NIOProcedures.readInt;
 import static ru.spbau.mit.torrent.Utils.*;
 
 public abstract class AbstractClientSession implements Runnable, Closeable {
-    private static final Logger LOGGER = LogManager.getLogger("clientSession");
+    private static final Logger LOGGER = LogManager.getLogger("AbstractClientSession");
 
     private final AsynchronousSocketChannel channel;
 
@@ -36,11 +37,10 @@ public abstract class AbstractClientSession implements Runnable, Closeable {
                 int requestType = readInt(channel);
                 int fileId;
                 int partId;
-                LOGGER.info("Proceeding: " + COMMAND_LIST);
                 switch (requestType) {
                     case CODE_STAT:
-                        fileId = readInt(channel);
                         LOGGER.info("Proceeding: " + COMMAND_STAT);
+                        fileId = readInt(channel);
                         proceedStat(fileId);
                         break;
                     case CODE_GET:
@@ -52,6 +52,9 @@ public abstract class AbstractClientSession implements Runnable, Closeable {
                     default:
                         throw new ClientException("Unknown type of request; " + requestType);
                 }
+            } catch (BufferUnderflowException e) {
+                LOGGER.warn("channel seems to be closed: " + e);
+                return;
             } catch (Exception e) {
                 LOGGER.error("Error while proceeding request: " + e);
             }
@@ -62,7 +65,8 @@ public abstract class AbstractClientSession implements Runnable, Closeable {
         return channel;
     }
 
-    abstract void proceedGet(int fileId, int partId) throws IOException, NIOException;
+    // if failed with given id, put 0 as number of bytes.
+    abstract void proceedGet(int fileId, int partId) throws NIOException;
 
     abstract void proceedStat(int fileId) throws Exception;
 }

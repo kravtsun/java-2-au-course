@@ -6,49 +6,33 @@ import java.nio.channels.AsynchronousSocketChannel;
 import java.util.List;
 
 public interface AbstractClient {
-
-    /**
-     *
-     - Клиент при подключении отправляет на трекер список раздаваемых им файлов.
-
-     - При скачивании файла клиент получает у трекера информацию о клиентах,
-     раздающих файл (сидах), и далее общается с ними напрямую.
-
-     - У отдельного сида можно узнать о том, какие полные части у него есть,
-     а также скачать их.
-
-     - После скачивания отдельных блоков некоторого файла клиент становится сидом.
-
-     Torrent-client:
-     - Порт клиента указывается при запуске и передается на трекер в рамках запроса update
-
-     - Каждый файл раздается по частям, размер части — константа на всё приложение
-
-     - Клиент хранит и раздает эти самые части
-
-     Запросы:
-     - stat — доступные для раздачи части определенного файла
-     - get — скачивание части определенного файла
-
-     Этот класс используется для хранения информации на трекере.
-     */
-
 //    Server.bind() should be called before connecting to tracker.
-    void connectToTracker(InetSocketAddress trackerAddress) throws ClientException;
-
-//    // TODO
-//    void disconnect();
+    void connectToTracker(InetSocketAddress trackerAddress) throws ClientException, NIOException;
 
     List<FileProxy> executeList() throws NIOException;
 
     List<InetSocketAddress> executeSources(int fileId) throws NIOException;
 
+    boolean executeUpdate() throws NIOException;
+
     // Client-specific requests.
+    void connect(InetSocketAddress otherClientAddress) throws IOException;
+
+    boolean isConnected() throws IOException;
+
+    void disconnect() throws IOException;
+
     int executeUpload(String filename) throws NIOException;
 
-    List<Integer> executeStat(AsynchronousSocketChannel in, int fileId) throws NIOException;
+    List<Integer> executeStat(int fileId) throws NIOException;
 
-    void executeGet(AsynchronousSocketChannel in, int fileId, int part) throws IOException, NIOException;
+    /**
+     * @param fileId file id
+     * @param part part number
+     * @param filename where to save file part. Can be null or empty, then this Client's fileProxy is used.
+     * @throws IOException on problems with opening file for writing.
+     * @throws NIOException on problems with network or protocol.
+     */
+    void executeGet(int fileId, int part, String filename) throws IOException, NIOException;
 
-    boolean executeUpdate() throws NIOException;
 }

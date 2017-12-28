@@ -18,16 +18,20 @@ class TrackerSession extends AbstractTrackerSession {
     private final AbstractTracker tracker;
     private InetSocketAddress address;
     private long lastUpdated;
+    private final Thread updateCheckerThread;
 
     TrackerSession(AbstractTracker tracker, AsynchronousSocketChannel channel) throws NIOException {
         super(channel);
         this.tracker = tracker;
+
+        // protocol: on connecting to tracker client should firstly send update request.
+        // currently there are no response from tracker on that greeting.
         int opCode = readInt(channel);
         if (opCode != CODE_UPDATE) {
             throw new TrackerException("update expected");
         }
         proceedUpdate();
-        new Thread(() -> {
+        updateCheckerThread = new Thread(() -> {
             while (channel.isOpen()) {
                 try {
                     synchronized (this) {
@@ -38,14 +42,22 @@ class TrackerSession extends AbstractTrackerSession {
                         wait(UPDATE_TIMEOUT);
                     }
                 } catch (InterruptedException e) {
-                    LOGGER.warn("InterruptedException for update checker: " + e);
+                    LOGGER.debug("InterruptedException for update checker: " + e);
                     break;
                 } catch (IOException e) {
                     LOGGER.warn("Error while trying to close channel: " + e);
                     break;
                 }
             }
-        }).start();
+        });
+        updateCheckerThread.setDaemon(true);
+        updateCheckerThread.start();
+    }
+
+    @Override
+    public synchronized void close() throws IOException {
+        super.close();
+        updateCheckerThread.interrupt();
     }
 
     @Override
@@ -60,6 +72,7 @@ class TrackerSession extends AbstractTrackerSession {
 
     @Override
     synchronized void proceedUpload() throws NIOException {
+        LOGGER.info("Proceeding: " + COMMAND_UPLOAD);
         String filename = readString(getChannel());
         long size = readLong(getChannel());
         int fileId = tracker.upload(address, filename, size);

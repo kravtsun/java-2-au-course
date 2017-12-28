@@ -47,7 +47,7 @@ public class TrackerConfigTest {
 //        tracker.writeConfig(EMPTY_CONFIG);
     }
 
-    @Test(expected = TrackerException.class, timeout = TIME_LIMIT)
+    @Test(timeout = TIME_LIMIT)
     public void sourcesFailsOnNonExistentFile() throws Exception {
         testCleanStart();
         Assert.isEmpty(tracker.sources(-1));
@@ -87,7 +87,7 @@ public class TrackerConfigTest {
     private void uploadFile(File file) throws Exception {
         final int fileHitCount = 3;
         while (true) {
-            InetSocketAddress currentClientAddress = getClientAddress(fileIdBase / fileHitCount);
+            InetSocketAddress currentClientAddress = getClientAddress();
             try (Client client = new Client(currentClientAddress, tracker.getAddress(), null)) {
                 for (int i = 0; i < fileHitCount; i++) {
                     int fileId = tracker.upload(client.getAddress(), file.toString(), file.length());

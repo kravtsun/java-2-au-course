@@ -1,5 +1,10 @@
 package ru.spbau.mit.torrent;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
@@ -9,10 +14,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static ru.spbau.mit.torrent.NIOProcedures.writeInt;
+import static ru.spbau.mit.torrent.NIOProcedures.writeLong;
 import static ru.spbau.mit.torrent.NIOProcedures.writeUntil;
-import static ru.spbau.mit.torrent.Utils.FILE_PART_SIZE;
+import static ru.spbau.mit.torrent.Utils.*;
 
 class ClientSession extends AbstractClientSession {
+    private static final Logger LOGGER = LogManager.getLogger("ClientSession");
     private final Client client;
 
     ClientSession(Client client, AsynchronousSocketChannel channel) {
@@ -21,29 +28,36 @@ class ClientSession extends AbstractClientSession {
     }
 
     @Override
-    public void proceedGet(int fileId, int partId) throws IOException, NIOException {
+    public void proceedGet(int fileId, int partId) throws NIOException {
+        LOGGER.info("Proceeding: " + COMMAND_GET);
         FileProxy fileProxy = client.getFile(fileId);
-        assert fileProxy != null;
-        // TODO send length of part before the part entities themselves.
-        // on empty fileProxy send 0.
-
-        try (RandomAccessFile file = new RandomAccessFile(fileProxy.getName(), "r")) {
+        File realFile = client.fileFromProxy(fileProxy);
+//        if (!realFile.exists()) {
+//            throw new ClientException("cannot seed: file \"" + realFile.getAbsolutePath() + "\" does not exist");
+//        }
+        try (RandomAccessFile file = new RandomAccessFile(realFile, "r")) {
             long length = file.length();
             long start = partId * FILE_PART_SIZE;
             if (start > length) {
-                throw new ClientException("part " + partId + " is not consistent with file length: " + length);
+                String message = "part " + partId + " is not consistent with file length: " + length;
+                throw new ClientException(message);
             }
             long finish = start + FILE_PART_SIZE;
             if (finish > length) {
                 finish = length;
             }
-            ByteBuffer buffer = file.getChannel().map(FileChannel.MapMode.READ_ONLY, start, finish);
+            long size = finish - start;
+            ByteBuffer buffer = file.getChannel().map(FileChannel.MapMode.READ_ONLY, start, size);
+            writeLong(getChannel(), size);
             writeUntil(buffer, getChannel());
+        } catch (IOException e) {
+            writeLong(getChannel(), 0);
         }
     }
 
     @Override
     public void proceedStat(int fileId) throws NIOException {
+        LOGGER.info("Proceeding: " + COMMAND_STAT);
         List<Integer> parts = client.getFileParts(fileId);
         writeInt(getChannel(), parts.size());
         for (Integer part: parts) {

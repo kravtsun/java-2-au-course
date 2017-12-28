@@ -12,7 +12,7 @@ import static ru.spbau.mit.torrent.NIOProcedures.readInt;
 import static ru.spbau.mit.torrent.Utils.*;
 
 public abstract class AbstractTrackerSession implements Closeable, Runnable {
-    private final Logger logger = LogManager.getLogger("trackerSession");
+    private final Logger logger = LogManager.getLogger("AbstractTrackerSession");
     private final AsynchronousSocketChannel channel;
 
     AbstractTrackerSession(AsynchronousSocketChannel channel) {

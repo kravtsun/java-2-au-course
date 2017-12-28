@@ -17,6 +17,8 @@ public final class Utils {
     static final String COMMAND_UPDATE = "update";
     static final String COMMAND_GET = "get";
     static final String COMMAND_STAT = "stat";
+    static final String COMMAND_CONNECT = "connect";
+    static final String COMMAND_DISCONNECT = "disconnect";
 
     static final int CODE_LIST = 1;
     static final int CODE_UPLOAD = 2;

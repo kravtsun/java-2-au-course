@@ -7,6 +7,7 @@ import java.net.UnknownHostException;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 final class TestCommons {
     static final int TIME_LIMIT = 2000;
@@ -15,13 +16,13 @@ final class TestCommons {
     static final int DEFAULT_PORT = 8081;
     static final String HOSTNAME = "localhost";
     static final String EMPTY_CONFIG = Paths.get(TEST_DIR, "empty_tracker.config").toString();
-    static final List<Integer> CLIENT_PORTS = Arrays.asList(8082, 8083, 8084, 8085);
+    static final AtomicInteger CLIENT_PORT = new AtomicInteger(8082);
 
     static final File EMPTY_FILE = new File(Paths.get(TEST_DIR, "empty.txt").toString());
     static final File CRLF_FILE = new File(Paths.get(TEST_DIR, "crlf.txt").toString());
 
-    static InetSocketAddress getClientAddress(int index) throws UnknownHostException {
-        return new InetSocketAddress(InetAddress.getByName(HOSTNAME), CLIENT_PORTS.get(index));
+    static InetSocketAddress getClientAddress() throws UnknownHostException {
+        return new InetSocketAddress(InetAddress.getByName(HOSTNAME), CLIENT_PORT.getAndIncrement());
     }
 
     static InetSocketAddress getTrackerAddress() throws UnknownHostException {

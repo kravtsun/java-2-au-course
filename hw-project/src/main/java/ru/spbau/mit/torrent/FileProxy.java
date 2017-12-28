@@ -3,9 +3,9 @@ package ru.spbau.mit.torrent;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class FileProxy implements Cloneable {
-    private static final AtomicInteger FILE_ID = new AtomicInteger(0);
+    static final AtomicInteger FILE_ID = new AtomicInteger(0);
     private final int id;
-    private final String name;
+    private String name;
     private final long size;
 
     FileProxy(int id, String name, long size) {
@@ -26,6 +26,10 @@ public class FileProxy implements Cloneable {
         return name;
     }
 
+    public void setName(String name) {
+        this.name = name;
+    }
+
     public long getSize() {
         return size;
     }
@@ -37,6 +41,6 @@ public class FileProxy implements Cloneable {
 
     @Override
     public String toString() {
-        return id + "\"" + name + "\": (" + size + " bytes)";
+        return id + " \"" + name + "\": (" + size + " bytes)";
     }
 }
