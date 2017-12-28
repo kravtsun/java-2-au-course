@@ -4,13 +4,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.FileChannel;
-import java.util.ArrayList;
 import java.util.List;
 
 import static ru.spbau.mit.torrent.NIOProcedures.writeInt;
@@ -32,9 +30,6 @@ class ClientSession extends AbstractClientSession {
         LOGGER.info("Proceeding: " + COMMAND_GET);
         FileProxy fileProxy = client.getFile(fileId);
         File realFile = client.fileFromProxy(fileProxy);
-//        if (!realFile.exists()) {
-//            throw new ClientException("cannot seed: file \"" + realFile.getAbsolutePath() + "\" does not exist");
-//        }
         try (RandomAccessFile file = new RandomAccessFile(realFile, "r")) {
             long length = file.length();
             long start = partId * FILE_PART_SIZE;
@@ -51,6 +46,7 @@ class ClientSession extends AbstractClientSession {
             writeLong(getChannel(), size);
             writeUntil(buffer, getChannel());
         } catch (IOException e) {
+            // if file does not exist or we can't upload its part.
             writeLong(getChannel(), 0);
         }
     }

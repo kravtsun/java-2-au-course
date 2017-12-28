@@ -15,7 +15,7 @@ import java.util.concurrent.Executors;
 public abstract class Server implements Closeable {
     private static final Logger LOGGER = LogManager.getLogger("Server");
     private AsynchronousServerSocketChannel servingChannel;
-    private List<AsynchronousSocketChannel> channels = new ArrayList<>();
+    private final List<AsynchronousSocketChannel> channels = new ArrayList<>();
     private final AsynchronousChannelGroup group;
 
     Server() throws IOException {

@@ -96,7 +96,8 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
             }
 
             if (maxFileId != -1 && fileProxies.size() != maxFileId) {
-                String message = "Something's not right, maxFileId: " + maxFileId + " but fileProxies.size() = " + fileProxies.size();
+                String message = "Something's not right, maxFileId: " + maxFileId
+                        + " but fileProxies.size() = " + fileProxies.size();
                 LOGGER.warn(message);
             }
 

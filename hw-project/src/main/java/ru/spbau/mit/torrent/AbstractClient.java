@@ -2,7 +2,6 @@ package ru.spbau.mit.torrent;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.channels.AsynchronousSocketChannel;
 import java.util.List;
 
 public interface AbstractClient {
@@ -18,7 +17,7 @@ public interface AbstractClient {
     // Client-specific requests.
     void connect(InetSocketAddress otherClientAddress) throws IOException;
 
-    boolean isConnected() throws IOException;
+    boolean isConnected();
 
     void disconnect() throws IOException;
 

@@ -23,7 +23,7 @@ public class ClientTest {
     private Tracker emptyTracker;
 
     @Rule
-    public TemporaryFolder tmpFolder = new TemporaryFolder();
+    public final TemporaryFolder tmpFolder = new TemporaryFolder();
 
     @Before
     public void setUp() throws Exception {
@@ -40,7 +40,7 @@ public class ClientTest {
 
     @Test
     public void simpleConnectionToTracker() throws Exception {
-        try (Client ignored = getEmptyClient(0)) {
+        try (Client ignored = getEmptyClient()) {
             Thread.sleep(OPERATION_TIMEOUT); // wait for hand-shaking to happen.
         }
         emptyTracker.close();
@@ -48,7 +48,7 @@ public class ClientTest {
 
     @Test(expected = NIOException.class)
     public void failsOnTrackerClosing() throws Exception {
-        try (Client client = getEmptyClient(0)) {
+        try (Client client = getEmptyClient()) {
             assertTrue(client.executeUpdate());
             emptyTracker.close();
             Thread.sleep(OPERATION_TIMEOUT);
@@ -58,7 +58,7 @@ public class ClientTest {
 
     @Test
     public void emptyTrackerTest() throws Exception {
-        try (Client client = getEmptyClient(0)) {
+        try (Client client = getEmptyClient()) {
             assertEquals(Collections.emptyList(), client.executeList());
             assertEquals(Collections.emptyList(), client.executeSources(-1));
             assertEquals(Collections.emptyList(), client.executeSources(0));
@@ -69,30 +69,30 @@ public class ClientTest {
     public void uploadSmallFileTest() throws Exception {
         tmpFolder.delete();
         tmpFolder.create();
-        try (Client client = getEmptyClient(0)) {
+        try (Client client = getEmptyClient()) {
             String filename = CRLF_FILE.getAbsolutePath();
             int fileId = client.executeUpload(filename);
             assertEquals(0, fileId);
             assertEquals(Collections.singletonList(client.getAddress()), client.executeSources(fileId));
-            FileProxy fileProxy = client.getFile(0);
+            final FileProxy fileProxy = client.getFile(0);
             assertEquals(fileId, fileProxy.getId());
             assertEquals(filename, fileProxy.getName());
             assertEquals(CRLF_FILE.length(), fileProxy.getSize());
 
-            try (Client client1 = getEmptyClient(1)) {
+            try (Client client1 = getEmptyClient()) {
                 client1.connect(client.getAddress());
                 assertEquals(Collections.singletonList(fileId), client1.executeStat(fileId));
-                File client1File = tmpFolder.newFile();
+                final File client1File = tmpFolder.newFile();
                 client1.executeGet(fileId, 0, client1File.getAbsolutePath());
                 assertTrue(FileUtils.contentEquals(CRLF_FILE, client1File));
                 client1.disconnect();
 
-                File client1Config = tmpFolder.newFile();
                 FileProxy client1FileProxy = client1.getFile(fileId);
                 assertEquals(fileProxy.getSize(), client1FileProxy.getSize());
                 assertEquals(fileProxy.getId(), client1FileProxy.getId());
                 assertEquals(Collections.singletonList(0), client1.getFileParts(fileId));
 
+                final File client1Config = tmpFolder.newFile();
                 client1.writeConfig(client1Config.getAbsolutePath());
                 client1.initEmpty();
                 assertEquals(null, client1.getFile(fileId));
@@ -112,9 +112,9 @@ public class ClientTest {
         emptyTracker.close();
     }
 
-    private Client getEmptyClient(int clientIndex) throws IOException, NIOException, InterruptedException {
+    private Client getEmptyClient() throws IOException, NIOException, InterruptedException {
         Client client = new Client();
-        for (int i = 0; ; ++i) {
+        for (int i = 0;; ++i) {
             try {
                 client.bind(getClientAddress());
                 break;

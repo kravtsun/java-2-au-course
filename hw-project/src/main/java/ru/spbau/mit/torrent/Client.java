@@ -43,7 +43,9 @@ public class Client extends Server implements AbstractClient, Configurable, File
         initEmpty();
     }
 
-    public Client(InetSocketAddress listeningAddress, InetSocketAddress trackerAddress, String configFilename) throws NIOException, IOException {
+    public Client(InetSocketAddress listeningAddress,
+                  InetSocketAddress trackerAddress,
+                  String configFilename) throws NIOException, IOException {
         initEmpty();
         bind(listeningAddress);
         if (configFilename == null) {
@@ -297,7 +299,7 @@ public class Client extends Server implements AbstractClient, Configurable, File
         logger.info(message);
         synchronized (this) {
             files.put(fileId, fileProxy);
-            int partsCount = (int) ((size + FILE_PART_SIZE - 1)/ FILE_PART_SIZE);
+            int partsCount = (int) ((size + FILE_PART_SIZE - 1) / FILE_PART_SIZE);
             List<Integer> parts = new ArrayList<>();
             for (int i = 0; i < partsCount; i++) {
                 parts.add(i);
@@ -380,10 +382,7 @@ public class Client extends Server implements AbstractClient, Configurable, File
 
     @Override
     public boolean isConnected() {
-        if (otherClientChannel != null) {
-            return true;
-        }
-        return false;
+        return otherClientChannel != null;
     }
 
     @Override
@@ -401,15 +400,16 @@ public class Client extends Server implements AbstractClient, Configurable, File
             String command = scanner.next();
             int fileId;
             String filename;
-
-            final String otherClientAddressErrorMessage = "Error while retrieving other client's address";
+            String message;
 
             try {
                 switch (command) {
                     case COMMAND_CONNECT:
                         LOGGER.info("Connecting to other client");
                         if (client.isConnected()) {
-                            LOGGER.error("already connected to client " + client.otherClientChannel.getRemoteAddress());
+                            message = "already connected to client "
+                                    + client.otherClientChannel.getRemoteAddress();
+                            LOGGER.error(message);
                         }
                         try {
                             LOGGER.info("Other client host: ");
@@ -506,7 +506,8 @@ public class Client extends Server implements AbstractClient, Configurable, File
                 Future trackerConnectionFuture = trackerChannel.connect(trackerAddress);
                 Object connectionResult = trackerConnectionFuture.get();
                 if (connectionResult != null) {
-                    throw new ClientException("Error while getting trackerConnectionFuture: connectionResult != null");
+                    String message = "Error while getting trackerConnectionFuture: connectionResult != null";
+                    throw new ClientException(message);
                 }
             } catch (InterruptedException | ExecutionException | IOException e) {
                 throw new ClientException("Failed to connect to tracker: " + e);

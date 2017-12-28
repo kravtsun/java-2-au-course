@@ -9,7 +9,7 @@ class NIOException extends Exception {
         super(cause);
     }
 
-    public NIOException(String message, Throwable cause) {
+    NIOException(String message, Throwable cause) {
         super(message, cause);
     }
 }
