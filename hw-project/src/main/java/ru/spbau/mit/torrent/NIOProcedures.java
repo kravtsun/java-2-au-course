@@ -133,9 +133,11 @@ final class NIOProcedures {
     }
 
     private static void readUntilAsync(ByteBuffer buffer, AsynchronousSocketChannel in) throws NIOException {
-        Future future = in.read(buffer);
         try {
-            future.get();
+            while (buffer.hasRemaining()) {
+                Future future = in.read(buffer);
+                future.get();
+            }
         } catch (InterruptedException | ExecutionException e) {
             Throwable throwable = e.getCause();
             throw new NIOException("Error while waiting for reading: " + (throwable == null ? e : throwable));
@@ -144,9 +146,11 @@ final class NIOProcedures {
     }
 
     private static void writeUntilAsync(ByteBuffer buffer, AsynchronousSocketChannel out) throws NIOException {
-        Future future = out.write(buffer);
         try {
-            future.get();
+            while (buffer.hasRemaining()) {
+                Future future = out.write(buffer);
+                future.get();
+            }
         } catch (InterruptedException | ExecutionException e) {
             throw new NIOException("Error while waiting for writing", e);
         }
