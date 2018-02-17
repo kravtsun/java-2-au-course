@@ -3,6 +3,7 @@ package ru.spbau.mit.torrent;
 import org.apache.commons.cli.CommandLine;
 import org.apache.logging.log4j.Logger;
 
+import java.io.File;
 import java.net.InetSocketAddress;
 import java.util.List;
 
@@ -16,6 +17,7 @@ public final class Utils {
     static final String COMMAND_UPLOAD = "upload";
     static final String COMMAND_UPDATE = "update";
     static final String COMMAND_GET = "get";
+    static final String COMMAND_GETALL = "getall";
     static final String COMMAND_STAT = "stat";
     static final String COMMAND_CONNECT = "connect";
     static final String COMMAND_DISCONNECT = "disconnect";
@@ -73,6 +75,18 @@ public final class Utils {
         }
         assert integerIP == 0;
         return bytes;
+    }
+
+    public static int getNumParts(File file) {
+        return getNumParts(file.length());
+    }
+
+    public static int getNumParts(FileProxy file) {
+        return getNumParts(file.getSize());
+    }
+
+    public static int getNumParts(long length) {
+        return (int) ((length + FILE_PART_SIZE - 1) / FILE_PART_SIZE);
     }
 
     public static class UtilsException extends RuntimeException {

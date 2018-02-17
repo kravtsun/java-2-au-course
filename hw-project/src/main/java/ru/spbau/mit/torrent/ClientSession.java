@@ -27,7 +27,7 @@ class ClientSession extends AbstractClientSession {
 
     @Override
     public void proceedGet(int fileId, int partId) throws NIOException {
-        LOGGER.info("Proceeding: " + COMMAND_GET);
+        LOGGER.info("Proceeding: " + COMMAND_GET + " fileId: " + fileId + ", partId: " + partId);
         FileProxy fileProxy = client.getFile(fileId);
         File realFile = client.fileFromProxy(fileProxy);
         try (RandomAccessFile file = new RandomAccessFile(realFile, "r")) {
@@ -43,6 +43,7 @@ class ClientSession extends AbstractClientSession {
             }
             long size = finish - start;
             ByteBuffer buffer = file.getChannel().map(FileChannel.MapMode.READ_ONLY, start, size);
+            LOGGER.debug("send size: " + size);
             writeLong(getChannel(), size);
             writeUntil(buffer, getChannel());
         } catch (IOException e) {

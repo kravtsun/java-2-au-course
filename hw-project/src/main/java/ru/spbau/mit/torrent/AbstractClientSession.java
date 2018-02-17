@@ -6,6 +6,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.BufferUnderflowException;
+import java.nio.channels.AsynchronousCloseException;
 import java.nio.channels.AsynchronousSocketChannel;
 
 import static ru.spbau.mit.torrent.NIOProcedures.readInt;
@@ -52,6 +53,8 @@ public abstract class AbstractClientSession implements Runnable, Closeable {
                     default:
                         throw new ClientException("Unknown type of request; " + requestType);
                 }
+            } catch (NIOException e) {
+                LOGGER.info("Connection closed");
             } catch (BufferUnderflowException e) {
                 LOGGER.warn("channel seems to be closed: " + e);
                 return;

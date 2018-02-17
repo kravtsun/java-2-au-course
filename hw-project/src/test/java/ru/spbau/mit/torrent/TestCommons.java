@@ -18,6 +18,7 @@ final class TestCommons {
 
     static final File EMPTY_FILE = new File(Paths.get(TEST_DIR, "empty.txt").toString());
     static final File CRLF_FILE = new File(Paths.get(TEST_DIR, "crlf.txt").toString());
+    static final File BIG_RANDOM_FILE = new File(Paths.get(TEST_DIR, "big_random_file.bin").toString());
 
     static InetSocketAddress getClientAddress() throws UnknownHostException {
         return new InetSocketAddress(InetAddress.getByName(HOSTNAME), CLIENT_PORT.getAndIncrement());

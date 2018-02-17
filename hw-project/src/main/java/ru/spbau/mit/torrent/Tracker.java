@@ -165,7 +165,6 @@ public class Tracker extends Server implements AbstractTracker, AutoCloseable, C
             main_loop:
             while (true) {
                 String command = scanner.next();
-                // TODO replace with switch.
                 switch (command) {
                     case COMMAND_EXIT:
                         LOGGER.info("Exiting...");

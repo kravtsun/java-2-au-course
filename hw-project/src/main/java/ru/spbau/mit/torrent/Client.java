@@ -98,6 +98,7 @@ public class Client extends Server implements AbstractClient, Configurable, File
                 }
 
                 count = readInt(fileChannel);
+                logger.info("files size: " + count);
                 for (int i = 0; i < count; i++) {
                     int fileId = readInt(fileChannel);
                     FileProxy fileProxy = readProxy(fileChannel);
@@ -207,12 +208,7 @@ public class Client extends Server implements AbstractClient, Configurable, File
         return parts;
     }
 
-    @Override
-    public void executeGet(int fileId, int partId, String filename) throws IOException, NIOException {
-        logger.info("executeGet");
-        if (!isConnected()) {
-            throw new ClientException("Not connected to any client.");
-        }
+    FileProxy proxyForGet(int fileId, String filename) throws NIOException {
         List<Integer> parts;
         FileProxy fileProxy;
 
@@ -220,34 +216,68 @@ public class Client extends Server implements AbstractClient, Configurable, File
             parts = fileParts.get(fileId);
             fileProxy = files.get(fileId);
             if (parts == null || fileProxy == null) {
-                String message = "Need to execute list to tracker as file seems to be unknown";
-                throw new ClientException(message);
+                executeList();
             }
 
             if (filename != null && !filename.isEmpty()) {
                 fileProxy.setName(filename);
             }
         }
+        return fileProxy;
+    }
+
+    public void executeGetAll(int fileId, String filename) throws IOException, NIOException {
+        logger.info("executeGetAll");
+        if (!isConnected()) {
+            throw new ClientException("Not connected to any client.");
+        }
+
+        FileProxy fileProxy = proxyForGet(fileId, filename);
+        if (fileProxy == null) {
+            throw new ClientException("Failed to retrieve file proxy");
+        }
+        int numParts = getNumParts(fileProxy);
+        for (int i = 0; i < numParts; ++i) {
+            executeGet(fileId, i, filename);
+        }
+    }
+
+    @Override
+    public void executeGet(int fileId, int partId, String filename) throws IOException, NIOException {
+        logger.info("executeGet");
+        if (!isConnected()) {
+            throw new ClientException("Not connected to any client.");
+        }
+        FileProxy fileProxy = proxyForGet(fileId, filename);
+
+        List<Integer> parts;
+        synchronized (this) {
+            parts = fileParts.get(fileId);
+        }
 
         File realFile = fileFromProxy(fileProxy);
         logger.debug("Writing part#" + partId + " of fileId: " + fileId + " to file: " + realFile);
-        synchronized (this) {
-            try (RandomAccessFile file = new RandomAccessFile(realFile, "rw")) {
-                writeInt(otherClientChannel, CODE_GET);
-                writeInt(otherClientChannel, fileId);
-                writeInt(otherClientChannel, partId);
-                long start = partId * FILE_PART_SIZE;
-                long size = readLong(otherClientChannel);
-                if (size == 0) {
-                    logger.warn("No bytes were read for fileId " + fileId + ":" + partId);
-                } else {
-                    // FIXME size is incorrect if file's length is not divisible by FILE_PART_SIZE!!!
-                    MappedByteBuffer buffer = file.getChannel().map(FileChannel.MapMode.READ_WRITE, start, size);
-                    readUntil(buffer, otherClientChannel);
-                }
+        try (RandomAccessFile file = new RandomAccessFile(realFile, "rw")) {
+            writeInt(otherClientChannel, CODE_GET);
+            logger.debug("send get");
+            writeInt(otherClientChannel, fileId);
+            logger.debug("send fileId: " + fileId);
+            writeInt(otherClientChannel, partId);
+            logger.debug("send partId: " + partId);
+            long start = partId * FILE_PART_SIZE;
+            long size = readLong(otherClientChannel);
+            logger.debug("received size: " + size);
+            if (size == 0) {
+                logger.warn("No bytes were read for fileId " + fileId + ":" + partId);
+            } else {
+                MappedByteBuffer buffer = file.getChannel().map(FileChannel.MapMode.READ_WRITE, start, size);
+                readUntil(buffer, otherClientChannel);
             }
-            parts.add(partId);
         }
+        if (parts.isEmpty()) {
+            executeUpdate();
+        }
+        parts.add(partId);
     }
 
     @Override
@@ -299,7 +329,7 @@ public class Client extends Server implements AbstractClient, Configurable, File
         logger.info(message);
         synchronized (this) {
             files.put(fileId, fileProxy);
-            int partsCount = (int) ((size + FILE_PART_SIZE - 1) / FILE_PART_SIZE);
+            int partsCount = getNumParts(file);
             List<Integer> parts = new ArrayList<>();
             for (int i = 0; i < partsCount; i++) {
                 parts.add(i);
@@ -351,6 +381,7 @@ public class Client extends Server implements AbstractClient, Configurable, File
 
     @Override
     public void close() throws IOException {
+        super.close();
         writeConfig(configFilename);
         trackerUpdateThread.interrupt();
         synchronized (trackerMonitor) {
@@ -382,6 +413,9 @@ public class Client extends Server implements AbstractClient, Configurable, File
 
     @Override
     public boolean isConnected() {
+        if (otherClientChannel != null && !otherClientChannel.isOpen()) {
+            otherClientChannel = null;
+        }
         return otherClientChannel != null;
     }
 
@@ -457,6 +491,14 @@ public class Client extends Server implements AbstractClient, Configurable, File
                         LOGGER.info("filename (optional but not skippable on first get with this fileId): ");
                         filename = scanner.next();
                         client.executeGet(fileId, partId, filename);
+                        break;
+                    case COMMAND_GETALL:
+                        LOGGER.info("Getall command: ");
+                        LOGGER.info("fileId: ");
+                        fileId = scanner.nextInt();
+                        LOGGER.info("filename (optional but not skippable on first get with this fileId): ");
+                        filename = scanner.next();
+                        client.executeGetAll(fileId, filename);
                         break;
                     case COMMAND_STAT:
                         LOGGER.info("Stat command: ");
